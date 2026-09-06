@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Legacy Heights · Interactive Masterplan</title>
+  <meta name="description" content="Interactive 3D masterplan of Legacy Heights, Lowthers Plantation, Christ Church, Barbados." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css?v=2" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <div id="loading">
+    <div class="loading-card">
+      <div class="brand-mark">LH</div>
+      <h1>Legacy Heights</h1>
+      <p id="loading-text" data-i18n="loading">Loading the subdivision…</p>
+      <div class="bar"><div id="loading-bar"></div></div>
+    </div>
+  </div>
+
+  <header id="topbar">
+    <div class="brand">
+      <div class="brand-mark small">LH</div>
+      <div>
+        <h1>Legacy Heights</h1>
+        <p data-i18n="subtitle">Lowthers Plantation · Christ Church · Barbados</p>
+      </div>
+    </div>
+    <div class="search-wrap">
+      <input id="search" type="search" autocomplete="off" data-i18n-ph="search" placeholder="Search house or lot…" />
+      <div id="search-results"></div>
+    </div>
+    <div class="topbar-right">
+      <div class="counter"><b id="count-houses">–</b> <span data-i18n="houses">houses</span> · <b id="count-lots">–</b> <span data-i18n="lots">lots</span></div>
+      <button id="btn-overview" class="btn" data-i18n="resetView">Overview</button>
+      <button id="btn-top" class="btn" data-i18n="topView">Top view</button>
+      <button id="btn-colortype" class="btn" data-i18n="colorByType">Colour by type</button>
+      <button id="btn-ao" class="btn" title="Ambient occlusion" data-i18n="ao">AO</button>
+      <button id="btn-lang" class="btn ghost">PT</button>
+    </div>
+  </header>
+
+  <aside id="legend">
+    <h2 data-i18n="legend">House types</h2>
+    <div id="legend-items"></div>
+    <p class="hint" data-i18n="hoverHint">Hover a house for a quick summary · click to open details</p>
+  </aside>
+
+  <div id="compass-wrap" title="North"><div id="compass"><span>N</span></div></div>
+  <p id="controls-hint" data-i18n="controls">Drag to orbit · right-drag / two fingers to pan · scroll to zoom</p>
+  <p id="credits">Imagery © Esri, Maxar, Earthstar Geographics · Ground textures: Poly Haven (CC0)</p>
+
+  <div id="tooltip"></div>
+
+  <aside id="panel">
+    <button id="panel-close" class="icon-btn" aria-label="Close">×</button>
+    <figure>
+      <img id="panel-img" alt="" />
+      <figcaption id="panel-imgnote"></figcaption>
+    </figure>
+    <div class="panel-head">
+      <h2 id="panel-title">House</h2>
+      <p id="panel-sub"></p>
+    </div>
+    <div id="panel-body"></div>
+    <div class="panel-actions">
+      <button id="panel-prev" class="btn ghost" data-i18n="prev">Previous</button>
+      <button id="panel-fly" class="btn primary" data-i18n="flyTo">Fly to house</button>
+      <button id="panel-next" class="btn ghost" data-i18n="next">Next</button>
+    </div>
+  </aside>
+
+  <script type="module" src="src/main.js?v=3"></script>
+</body>
+</html>
