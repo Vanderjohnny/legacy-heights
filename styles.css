@@ -113,11 +113,44 @@ h1, h2, h3, p { margin: 0; }
   #controls-hint { display: none; }
 }
 @media (max-width: 640px) {
+  /* phone layout: two-row header, chip strip for the legend, bottom sheet for the details */
+  #topbar { top: 8px; left: 8px; right: 8px; gap: 6px; }
+  .brand { padding: 5px 10px 5px 5px; border-radius: 12px; gap: 8px; }
+  .brand h1 { font-size: 15px; }
   .brand p { display: none; }
-  .topbar-right { flex-wrap: wrap; margin-left: 0; }
-  .btn { height: 38px; padding: 0 12px; font-size: 13px; }
-  #search { height: 40px; }
-  #legend { left: 8px; right: 8px; bottom: 8px; width: auto; }
-  #panel { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 70vh; transform: translateY(calc(100% + 30px)); }
-  #compass-wrap { bottom: auto; top: 175px; right: 8px; width: 38px; height: 38px; }
+  .brand-mark.small { width: 30px; height: 30px; font-size: 12px; border-radius: 9px; }
+  .search-wrap { order: 3; flex: 1 1 100%; }
+  #search { height: 36px; font-size: 14px; border-radius: 12px; padding: 0 12px; }
+  #search-results { top: 42px; }
+  .topbar-right { margin-left: auto; gap: 5px; flex-wrap: nowrap; }
+  .btn { height: 32px; padding: 0 9px; font-size: 12px; border-radius: 10px; }
+  .btn.ghost { padding: 0 8px; }
+  #btn-ao { display: none; }
+  #legend { left: 8px; right: 8px; bottom: 8px; width: auto; padding: 6px 8px; border-radius: 12px; }
+  #legend h2 { display: none; }
+  #legend-items { flex-direction: row; flex-wrap: wrap; gap: 4px; }
+  .chip { grid-template-columns: auto 1fr auto; gap: 6px; width: auto; flex: 1 1 44%; padding: 5px 8px; border-radius: 8px; }
+  .chip-sub { display: none; }
+  .chip-label { font-size: 12px; white-space: nowrap; }
+  .chip-count { min-width: 0; font-size: 12px; }
+  .chip.all { flex: 1 1 100%; padding: 3px; margin-top: 0; font-size: 11px; }
+  .hint { display: none; }
+  #compass-wrap { top: auto; bottom: 118px; right: 8px; width: 34px; height: 34px; }
+  #compass { width: 24px; height: 24px; }
+  #compass span { top: 11px; font-size: 9px; }
+  #credits { right: 8px; left: 8px; bottom: 100px; font-size: 9px; padding: 0; text-align: right; }
+  #panel { top: auto; left: 0; right: 0; bottom: 0; width: auto; max-width: none; max-height: 52vh; border-radius: 18px 18px 0 0; transform: translateY(calc(100% + 30px)); }
+  #panel figure { aspect-ratio: auto; height: 96px; }
+  .icon-btn { top: 8px; right: 8px; width: 30px; height: 30px; font-size: 18px; }
+  .panel-head { padding: 10px 14px 2px; }
+  .panel-head h2 { font-size: 20px; }
+  .panel-head p { font-size: 13px; margin-top: 2px; }
+  #panel-body { padding: 2px 14px 6px; }
+  .fact { padding: 5px 0; gap: 8px; }
+  .fact .k { font-size: 12px; }
+  .fact .v { font-size: 13px; }
+  .fact .v em { font-size: 11px; }
+  .source { display: none; }
+  .panel-actions { padding: 8px 12px calc(10px + env(safe-area-inset-bottom)); gap: 6px; }
+  .panel-actions .btn { height: 36px; font-size: 13px; }
 }

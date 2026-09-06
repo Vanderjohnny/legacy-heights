@@ -58,8 +58,10 @@ const fmt = (n, d = 0) => (n == null || Number.isNaN(n)) ? '–' : n.toLocaleStr
 // Renderer / scene
 // ---------------------------------------------------------------------------
 const canvas = document.getElementById('scene');
+const IS_TOUCH = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+const IS_PHONE = () => window.innerWidth <= 640;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, IS_TOUCH ? 1.5 : 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -138,7 +140,7 @@ async function setupEnvironment() {
   scene.backgroundIntensity = 1.0;
 }
 function setupShadows() {
-  csm = new CSM({ camera, parent: scene, cascades: 3, maxFar: 1500, mode: 'practical', shadowMapSize: 2048, shadowBias: -0.00012,
+  csm = new CSM({ camera, parent: scene, cascades: 3, maxFar: 1500, mode: 'practical', shadowMapSize: IS_TOUCH ? 1024 : 2048, shadowBias: -0.00012,
     lightDirection: SUN_DIR.clone().negate().normalize(), lightIntensity: 2.6, lightMargin: 150, lightNear: 1, lightFar: 3000 });
   csm.fade = true;
 }
@@ -999,10 +1001,18 @@ function flyToHouse(h) {
   const d = Math.max(info.size.x, info.size.z) * 1.9;
   const pos = center.clone().addScaledVector(front, d).addScaledVector(right, d * 0.42).addScaledVector(up, d * 0.62);
   const target = center.clone().setY(center.y - info.size.y * 0.2);
-  // keep the house clear of the detail panel: shift the view so the house sits in the left two thirds
+  // keep the house clear of the detail panel: on desktop shift the view so the house sits in the left two thirds,
+  // on phones (bottom sheet) lift the house into the upper part of the screen
   const panelW = document.getElementById('panel').offsetWidth || 380;
-  if (window.innerWidth > 900) {
-    const camRight = new THREE.Vector3().subVectors(target, pos).cross(up).normalize();
+  const viewDir = new THREE.Vector3().subVectors(target, pos).normalize();
+  if (IS_PHONE()) {
+    const camUp = up.clone().addScaledVector(viewDir, -up.dot(viewDir)).normalize();
+    const shift = d * 0.2;
+    pos.addScaledVector(viewDir, -d * 0.35);   // a little further back: the visible strip above the sheet is small
+    pos.addScaledVector(camUp, -shift);
+    target.addScaledVector(camUp, -shift);
+  } else if (window.innerWidth > 900) {
+    const camRight = viewDir.clone().cross(up).normalize();
     const shift = d * 0.55 * (panelW / window.innerWidth);
     pos.addScaledVector(camRight, shift);
     target.addScaledVector(camRight, shift);
@@ -1031,8 +1041,10 @@ function siteCenter() {
 }
 function setOverview(instant = false) {
   const c = siteCenter();
-  const target = c.clone().add(new THREE.Vector3(0, 0, -30));
-  const pos = c.clone().add(new THREE.Vector3(-60, 500, 610));
+  // portrait phones need a higher, more distant viewpoint to fit the whole site between the header and the legend
+  const portrait = window.innerHeight > window.innerWidth;
+  const target = c.clone().add(new THREE.Vector3(0, 0, portrait ? -80 : -30));
+  const pos = c.clone().add(portrait ? new THREE.Vector3(-30, 900, 760) : new THREE.Vector3(-60, 500, 610));
   if (instant) { camera.position.copy(pos); controls.target.copy(target); controls.update(); }
   else flyTo(pos, target, 1600);
 }
