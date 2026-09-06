@@ -26,7 +26,12 @@ a full HTML document for local testing. Rebuild it after changing anything in `s
 
 ## Deploy
 
-Upload the folder as-is to Netlify (drag and drop), Vercel, Cloudflare Pages, GitHub Pages or any web host.
+Public site: **https://vanderjohnny.github.io/legacy-heights/** (GitHub Pages, repository
+`github.com/Vanderjohnny/legacy-heights`, branch `main`, root folder). To update it, copy the site files into a clone
+of that repository (everything except `dist/`, the `*_orig.jpg` backups and the unused `*_thumb.jpg` files), commit and
+push; Pages redeploys in a minute or two. Keep the `.nojekyll` file so GitHub does not run Jekyll on the folder.
+
+The folder also works as-is on Netlify (drag and drop), Vercel, Cloudflare Pages or any web host.
 three.js and the Draco decoder are loaded from jsdelivr, so the page needs internet access.
 
 ## Structure
