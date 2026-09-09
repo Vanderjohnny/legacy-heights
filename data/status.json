@@ -1,0 +1,4 @@
+{
+  "note": "Read-only fallback used when BACKEND.url is empty (src/config.js). Keys are Blender property_ids from data/properties.json; status is available | reserved | sold. With the sales backend deployed this file is ignored.",
+  "statuses": {}
+}

@@ -14,10 +14,15 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2 } from './config.js';
+// internal modules carry a version query so browsers never pair a new main.js with a cached old module
+import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND } from './config.js?v=6';
+import { api } from './api.js?v=6';
+import { createNight } from './night.js?v=6';
+import { createCars } from './cars.js?v=6';
+import { createRegionMap } from './region.js?v=6';
 
 const THREE_VERSION = '0.170.0';
-const ASSET_V = '2026-09-05e';   // bump when models/textures change so browsers do not keep stale copies
+const ASSET_V = '2026-09-09a';   // bump when models/textures change so browsers do not keep stale copies
 const asset = (url) => `${url}${url.includes('?') ? '&' : '?'}v=${ASSET_V}`;
 // Single-file build (tools/build_single_html.py): every asset is embedded as base64 in window.LH_EMBED and nothing is fetched.
 const EMBED = window.LH_EMBED || null;
@@ -48,8 +53,12 @@ const state = {
   hovered: null,        // house record or lot record
   selected: null,
   activeTypes: new Set([1, 2, 3, 4]),
+  activeParcels: new Set(PARCELS),
   colorByType: false,
   flying: false,
+  props: {},            // property registry (data/properties.json), keyed by the Blender property_id
+  status: {},           // pid -> { status, updatedAt, by }  (sales backend / data/status.json)
+  night: false,
 };
 const t = (k) => I18N[state.lang][k] ?? I18N.en[k] ?? k;
 const fmt = (n, d = 0) => (n == null || Number.isNaN(n)) ? '–' : n.toLocaleString(state.lang === 'pt' ? 'pt-BR' : 'en-US', { maximumFractionDigits: d, minimumFractionDigits: d });
@@ -237,25 +246,31 @@ const houseGroups = [];      // InstancedMesh list (visible geometry)
 const proxies = [];          // invisible instanced boxes for picking (one per model)
 const modelInfo = {};        // model index -> { center: Vector3 (local three), size }
 let lotLines, hoverLine, selectLine, selectFill;
+let night = null, cars = null, regionMap = null;   // night mode / streetlights, moving cars, regional map
 
 async function init() {
-  const data = await loadJson('data/site.json');
+  const [data, registry, statusDoc] = await Promise.all([
+    loadJson('data/site.json'),
+    loadJson('data/properties.json').catch(() => ({ properties: {} })),
+    api.statuses().catch(() => ({ statuses: {} })),
+  ]);
   state.data = data;
+  state.props = registry.properties || {};
+  state.registry = registry;
+  state.status = statusDoc.statuses || {};
   prepareData(data);
   buildLots(data);
 
   // the single-file build ships the six houses merged in one GLB (one scene per body) so their textures are shared
   const mergedHouses = embedded('assets/models/houses.glb');
-  const [, , curbs, ground, ...houseGltfs] = await Promise.all([
+  const [, , ground, ...houseGltfs] = await Promise.all([
     setupEnvironment(),
     setupSatellite(),
-    loadGLB('assets/models/curbs.glb').catch(() => null),
     loadGLB('assets/models/ground.glb'),
     ...(mergedHouses ? [loadGLB('assets/models/houses.glb')] : [1, 2, 3, 4, 5, 6].map((i) => loadGLB(`assets/models/house_${i}.glb`))),
   ]);
   setupShadows();
   setupGround(ground.scene);
-  if (curbs) setupCurbs(curbs.scene);
   buildPavedGrid();
   completeHedges();
   if (mergedHouses) {
@@ -267,17 +282,35 @@ async function init() {
     }
   } else houseGltfs.forEach((g, idx) => setupHouseModel(idx + 1, g.scene, data.models[idx + 1]));
   await buildTrees(data);
+  night = createNight({ scene, renderer, controls, getCsm: () => csm, hemi, treeGroup, worldGround, satMeshes, HORIZON, pmrem, isTouch: IS_TOUCH, lots: state.lots, lotByHouse: state.lotByHouse, pavedClass, models, rebuildInstances, sunDir: SUN_DIR });
+  night.build();
+  cars = createCars({ scene, paintGeometries: groundMeshes.filter((o) => (Array.isArray(o.material) ? o.material[0] : o.material) === MATS.paint).map((o) => o.geometry), isTouch: IS_TOUCH });
+  state.carReport = cars.build();
   applyShading();
   setupPost();
   applyFilter();
 
   setupUI();
+  buildStatusLines();
   setOverview(true);
+  // compile the night-only shaders now (asynchronously) so the first Day/Night toggle does not stall
+  try { night.apply(true); await renderer.compileAsync(scene, camera); night.apply(false); await renderer.compileAsync(scene, camera); } catch (e) { night.apply(false); }
   loadingEl.classList.add('done');
   setTimeout(() => loadingEl.remove(), 900);
   handleHash();
   animate();
+  if (api.hasBackend()) setInterval(refreshStatuses, Math.max(15, BACKEND.pollSeconds) * 1000);
 }
+async function refreshStatuses() {
+  try {
+    const doc = await api.statuses();
+    state.status = doc.statuses || {};
+    buildStatusLines();
+    buildLegend();
+    if (state.selected) renderPanel(state.selected);
+  } catch (e) { console.warn('status refresh failed', e); }
+}
+const statusOf = (h) => (state.status[h.pid]?.status || 'available');
 
 function prepareData(data) {
   const lotsById = data.lots;
@@ -297,10 +330,14 @@ function prepareData(data) {
     let lots = ids.map((id) => lotRecById.get(id)).filter((l) => l && l.poly.length >= 3);
     if (!lots.length) { const l = lotAt(h.pos[0], h.pos[1]); if (l) lots = [l]; }
     lots.forEach((l) => { l.hasHouse = true; });
+    const prop = state.props[h.pid] || null;
     return {
       ...h,
       index: i,
       num: h.id.replace(/\D+/g, ''),
+      prop,
+      code: prop?.code || lots.map((l) => l.name).join('/'),
+      parcel: prop?.parcel || (lots.find((l) => /^[A-J]-/.test(l.name))?.name[0] ?? 'A'),
       lots,
       lotIds: lots.map((l) => l.id),
       lotNum: lots.length ? lots.map((l) => l.name).join(' + ') : (h.lot || '').replace(/\D+/g, ''),
@@ -338,9 +375,11 @@ function texturedMaterial({ diff, nor, rough, color = 0xffffff, roughness = 1, n
   m.userData.antiTiling = true;
   return m;
 }
+const satMeshes = [];
 async function setupSatellite() {
   let meta;
   try { meta = await loadJson('assets/map/sat_meta.json'); } catch { return; }
+  state.satMeta = meta;
   for (const [key, y, order] of [['vast', -0.9, -8], ['far', -0.6, -7], ['mid', -0.45, -6], ['near', -0.3, -5]]) {
     const m = meta[key];
     if (!m || !m.corners) continue;
@@ -357,6 +396,7 @@ async function setupSatellite() {
     mesh.renderOrder = order;
     mesh.frustumCulled = false;
     scene.add(mesh);
+    satMeshes.push(mesh);
   }
   if (meta.georef?.site_centre_latlng) state.siteLatLng = meta.georef.site_centre_latlng;
 }
@@ -452,7 +492,9 @@ function buildPavedGrid() {
   const w = Math.ceil(b.max[0] - x0) + 4, h = Math.ceil(b.max[1] - y0) + 4;
   const grid = new Uint8Array(w * h);
   for (const o of groundMeshes) {
-    if (!PAVED.has(Array.isArray(o.material) ? o.material[0] : o.material)) continue;
+    const mat = Array.isArray(o.material) ? o.material[0] : o.material;
+    if (!PAVED.has(mat)) continue;
+    const cls = mat === MATS.asphalt ? 2 : mat === MATS.paint ? 3 : 1;
     const p = o.geometry.attributes.position, idx = o.geometry.index;
     const n = idx ? idx.count : p.count;
     const X = (i) => p.getX(i), Y = (i) => -p.getZ(i);   // three -> Blender XY
@@ -465,11 +507,17 @@ function buildPavedGrid() {
         const px = gx + x0 + 0.5, py = gy + y0 + 0.5;
         const d1 = (px - bx) * (ay - by) - (ax - bx) * (py - by), d2 = (px - cx) * (by - cy) - (bx - cx) * (py - cy), d3 = (px - ax) * (cy - ay) - (cx - ax) * (py - ay);
         const neg = d1 < 0 || d2 < 0 || d3 < 0, pos = d1 > 0 || d2 > 0 || d3 > 0;
-        if (!(neg && pos) || (maxx - minx <= 1 && maxy - miny <= 1)) grid[gy * w + gx] = 1;
+        if (!(neg && pos) || (maxx - minx <= 1 && maxy - miny <= 1)) grid[gy * w + gx] = Math.max(grid[gy * w + gx], cls);
       }
     }
   }
   paved = { grid, x0, y0, w, h };
+}
+function pavedClass(x, y) {
+  if (!paved) return 0;
+  const gx = Math.floor(x - paved.x0), gy = Math.floor(y - paved.y0);
+  if (gx < 0 || gy < 0 || gx >= paved.w || gy >= paved.h) return 0;
+  return paved.grid[gy * paved.w + gx];
 }
 function isPaved(x, y, margin = 1) {
   if (!paved) return false;
@@ -709,21 +757,23 @@ function rebuildInstances(force = false) {
   if (!force && camera.position.distanceToSquared(_lodPos) < 36) return;
   _lodPos.copy(camera.position);
   const d2 = LOD_DIST * LOD_DIST;
-  for (const m of Object.values(models)) {
+  for (const [mIdx, m] of Object.entries(models)) {
     const near = [], far = [];
     for (const h of m.houses) {
-      if (!state.activeTypes.has(h.type)) continue;
+      if (!isVisibleHouse(h)) continue;
       _hp.setFromMatrixPosition(h.matrix);
       (_hp.distanceToSquared(camera.position) < d2 ? near : far).push(h);
     }
     fillGroup(m.hi, near);
     fillGroup(m.lo, far);
+    if (night) night.setWindows(mIdx, near);
   }
 }
 function refreshFacadeColors() { rebuildInstances(true); }
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
+const isVisibleHouse = (h) => state.activeTypes.has(h.type) && state.activeParcels.has(h.parcel);
 function applyFilter() {
-  const visible = (h) => state.activeTypes.has(h.type);
+  const visible = isVisibleHouse;
   for (const im of proxies) {
     im.userData.houses.forEach((h, k) => im.setMatrixAt(k, visible(h) ? h.matrix : ZERO));
     im.instanceMatrix.needsUpdate = true;
@@ -921,7 +971,7 @@ function pick(ev) {
   if (hits.length) {
     const im = hits[0].object;
     const h = im.userData.houses[hits[0].instanceId];
-    if (h && state.activeTypes.has(h.type)) return h;
+    if (h && isVisibleHouse(h)) return h;
   }
   const g = raycaster.intersectObject(pickPlane, false);
   if (g.length) {
@@ -929,7 +979,7 @@ function pick(ev) {
     const lot = lotAt(p.x, -p.z);
     if (lot) {
       const h = state.lotByHouse.get(lot.id);
-      if (h && state.activeTypes.has(h.type)) return h;
+      if (h && isVisibleHouse(h)) return h;
       if (!lot.hasHouse && (lot.hidden || lot.area_m2 > 60)) return lot;
     }
   }
@@ -948,8 +998,8 @@ function setHover(obj, ev) {
 }
 function tooltipHtml(o) {
   if (o.isHouse) {
-    const ty = TYPES[o.type];
-    return `<b>${t('house')} ${o.num}</b> · ${t('lot')} ${o.lotNum}<br><span class="dot" style="background:${ty.hex}"></span>${ty.label[state.lang]} · ${ty.beds} ${t('beds')} · ${ty.baths} ${t('baths')}${ty.units > 1 ? ` (${t('perUnit')})` : ''}<br><span class="muted">${fmt(o.lotArea * SQFT_PER_M2)} ${t('sqft')} · ${fmt(o.lotArea)} ${t('sqm')}</span>`;
+    const ty = TYPES[o.type], st = statusOf(o);
+    return `<b>${t('lot')} ${o.code}</b> · <span class="dot" style="background:${STATUS[st].hex}"></span>${STATUS[st].label[state.lang]}<br><span class="dot" style="background:${ty.hex}"></span>${ty.label[state.lang]} · ${o.prop?.planName || ''} · ${ty.beds} ${t('beds')} · ${ty.baths} ${t('baths')}${ty.units > 1 ? ` (${t('perUnit')})` : ''}<br><span class="muted">${t('parcel')} ${o.parcel} · ${fmt(o.lotArea * SQFT_PER_M2)} ${t('sqft')} · ${fmt(o.lotArea)} ${t('sqm')}</span>`;
   }
   return `<b>${t('lot')} ${o.name}</b><br><span class="muted">${o.hidden ? t('openSpace') : t('freeLot')} · ${fmt(o.area_m2 * SQFT_PER_M2)} ${t('sqft')} · ${fmt(o.area_m2)} ${t('sqm')}</span>`;
 }
@@ -983,14 +1033,42 @@ function select(h, fly = true) {
   setLineFromPolys(selectLine, h.lotPolys, 0.14);
   setFillFromPolys(selectFill, h.lotPolys);
   renderPanel(h);
-  try { history.replaceState(null, '', `#casa-${h.num}`); } catch { /* sandboxed page */ }
+  try { history.replaceState(null, '', `#${h.pid ? 'p-' + h.pid.replace(/^LH_/, '') : 'casa-' + h.num}`); } catch { /* sandboxed page */ }
   if (fly) flyToHouse(h);
+}
+// reserved / sold lots get a permanent coloured outline in the scene
+let statusLines = null;
+function buildStatusLines() {
+  const pos = [], col = [];
+  for (const h of state.houses) {
+    const st = statusOf(h);
+    if (st === 'available') continue;
+    const c = new THREE.Color(STATUS[st].hex);
+    for (const poly of h.lotPolys) {
+      for (let i = 0; i < poly.length; i++) {
+        const a = poly[i], b = poly[(i + 1) % poly.length];
+        pos.push(a[0], 0.13, -a[1], b[0], 0.13, -b[1]);
+        col.push(c.r, c.g, c.b, c.r, c.g, c.b);
+      }
+    }
+  }
+  if (!statusLines) {
+    statusLines = new LineSegments2(new LineSegmentsGeometry(), new LineMaterial({ vertexColors: true, linewidth: 3, transparent: true, opacity: 0.95, depthTest: false, resolution: new THREE.Vector2(window.innerWidth, window.innerHeight) }));
+    statusLines.renderOrder = 4;
+    scene.add(statusLines);
+  }
+  statusLines.visible = pos.length > 0;
+  if (pos.length) {
+    statusLines.geometry.dispose();
+    statusLines.geometry = new LineSegmentsGeometry().setPositions(pos).setColors(col);
+    statusLines.computeLineDistances();
+  }
 }
 function clearSelection() {
   state.selected = null;
   selectLine.visible = selectFill.visible = false;
   document.getElementById('panel').classList.remove('open');
-  try { history.replaceState(null, '', ' '); } catch { /* sandboxed page */ }
+  try { history.replaceState(null, '', location.pathname + location.search); } catch { /* sandboxed page */ }
 }
 function flyToHouse(h) {
   const center = houseWorldCenter(h);
@@ -1076,8 +1154,8 @@ function setupUI() {
     const q = search.value.trim().toLowerCase().replace(/^(casa|house|lot|lote|terrenos?)\s*/, '').replace(/\s+/g, '');
     results.innerHTML = '';
     if (!q) { results.classList.remove('show'); return; }
-    const found = state.houses.filter((h) => h.num.includes(q) || h.lotNum.toLowerCase().replace(/\s+/g, '').includes(q) || h.lotIndex.includes(q) || h.num === q.padStart(3, '0')).slice(0, 8);
-    results.innerHTML = found.length ? found.map((h) => `<div data-id="${h.id}"><b>${t('house')} ${h.num}</b> · ${t('lot')} ${h.lotNum} <span class="dot" style="background:${TYPES[h.type].hex}"></span>${TYPES[h.type].label[state.lang]}</div>`).join('') : `<div class="muted">${t('noResults')}</div>`;
+    const found = state.houses.filter((h) => h.num.includes(q) || h.code.toLowerCase().replace(/\s+/g, '').includes(q) || h.lotNum.toLowerCase().replace(/\s+/g, '').includes(q) || h.lotIndex.includes(q) || h.num === q.padStart(3, '0') || (h.pid && h.pid.toLowerCase().includes(q))).slice(0, 8);
+    results.innerHTML = found.length ? found.map((h) => `<div data-id="${h.id}"><b>${t('lot')} ${h.code}</b> · ${t('house')} ${h.num} <span class="dot" style="background:${TYPES[h.type].hex}"></span>${TYPES[h.type].label[state.lang]} <span class="dot" style="background:${STATUS[statusOf(h)].hex}"></span></div>`).join('') : `<div class="muted">${t('noResults')}</div>`;
     results.classList.add('show');
   });
   results.addEventListener('click', (ev) => {
@@ -1085,10 +1163,29 @@ function setupUI() {
     if (!id) return;
     results.classList.remove('show'); search.value = '';
     const h = state.byId.get(id);
-    if (h) { state.activeTypes.add(h.type); applyFilter(); buildLegend(); select(h, true); }
+    if (h) { state.activeTypes.add(h.type); state.activeParcels.add(h.parcel); applyFilter(); buildLegend(); select(h, true); }
   });
+  // property panel v2: lightbox, sheet toggle, sales actions
+  $('panel-expand').onclick = () => $('panel').classList.toggle('expanded');
+  const openLightbox = () => { if (!state.selected) return; $('lightbox-img').src = $('panel-plan').src; $('lightbox-caption').textContent = $('panel-plan-name').textContent; $('lightbox').hidden = false; };
+  $('plan-expand').onclick = openLightbox;
+  $('panel-plan').onclick = openLightbox;
+  $('lightbox').onclick = (ev) => { if (ev.target.id === 'lightbox' || ev.target.classList.contains('lb-close')) $('lightbox').hidden = true; };
+  $('modal').onclick = (ev) => { if (ev.target.id === 'modal' || ev.target.classList.contains('modal-close')) closeModal(); };
+  $('btn-interest').onclick = () => state.selected && openLeadForm(state.selected);
+  $('btn-reserve').onclick = () => state.selected && openStatusChange(state.selected, statusOf(state.selected) === 'reserved' ? 'release' : 'reserve');
+  $('btn-sold').onclick = () => state.selected && openStatusChange(state.selected, statusOf(state.selected) === 'sold' ? 'release' : 'sold');
+  $('btn-night').onclick = () => setNight(!state.night);
+  $('btn-map').onclick = () => openRegionMap();
+  document.querySelector('.map-close').onclick = () => { $('map-modal').hidden = true; };
+  $('map-modal').onclick = (ev) => { if (ev.target.id === 'map-modal') $('map-modal').hidden = true; };
   document.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Escape') { clearSelection(); results.classList.remove('show'); }
+    if (ev.key === 'Escape') {
+      if (!$('lightbox').hidden) { $('lightbox').hidden = true; return; }
+      if (!$('modal').hidden) { closeModal(); return; }
+      if (!$('map-modal').hidden) { $('map-modal').hidden = true; return; }
+      clearSelection(); results.classList.remove('show');
+    }
     if (ev.target === search) return;
     if (ev.key === 'ArrowRight' && state.selected) step(1);
     if (ev.key === 'ArrowLeft' && state.selected) step(-1);
@@ -1096,7 +1193,7 @@ function setupUI() {
 }
 function step(dir) {
   if (!state.selected) return;
-  const list = state.houses.filter((h) => state.activeTypes.has(h.type));
+  const list = state.houses.filter(isVisibleHouse);
   const i = list.indexOf(state.selected);
   const next = list[(i + dir + list.length) % list.length];
   select(next, true);
@@ -1120,19 +1217,41 @@ function buildLegend() {
     };
   });
   $('chip-all').onclick = () => { state.activeTypes = new Set([1, 2, 3, 4]); applyFilter(); buildLegend(); };
+  // parcels / phases
+  const perParcel = {};
+  state.houses.forEach((h) => { perParcel[h.parcel] = (perParcel[h.parcel] || 0) + 1; });
+  const pel = $('parcel-items');
+  pel.innerHTML = PARCELS.map((p) => `<button class="pchip ${state.activeParcels.has(p) ? '' : 'off'}" data-parcel="${p}">${p}<small>${perParcel[p] || 0}</small></button>`).join('');
+  pel.querySelectorAll('.pchip').forEach((b) => {
+    b.onclick = (ev) => {
+      const p = b.dataset.parcel;
+      if (ev.shiftKey || ev.altKey) state.activeParcels = new Set([p]);
+      else if (state.activeParcels.has(p)) { if (state.activeParcels.size > 1) state.activeParcels.delete(p); }
+      else state.activeParcels.add(p);
+      if (state.selected && !isVisibleHouse(state.selected)) clearSelection();
+      applyFilter(); buildLegend();
+    };
+  });
+  // status legend
+  const perStatus = { available: 0, reserved: 0, sold: 0 };
+  state.houses.forEach((h) => { perStatus[statusOf(h)]++; });
+  $('status-items').innerHTML = Object.entries(STATUS).map(([k, s]) => `<span class="schip"><span class="dot" style="background:${s.hex}"></span>${s.label[state.lang]} <b>${perStatus[k]}</b></span>`).join('');
 }
 function updateCounter() {
-  const n = state.houses.filter((h) => state.activeTypes.has(h.type)).length;
+  const n = state.houses.filter(isVisibleHouse).length;
   $('count-houses').textContent = fmt(n);
   $('count-lots').textContent = fmt(state.lots.filter((l) => !l.hidden && l.area_m2 > 60).length);
 }
 function applyI18n() {
   document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll('[data-i18n-ph]').forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
+  document.querySelectorAll('[data-i18n-title]').forEach((el) => { el.title = t(el.dataset.i18nTitle); });
   $('btn-lang').textContent = state.lang === 'en' ? 'PT' : 'EN';
+  $('btn-night').textContent = state.night ? t('day') : t('night');
   document.documentElement.lang = state.lang === 'pt' ? 'pt-BR' : 'en';
   buildLegend();
   updateCounter();
+  if (regionMap) regionMap.refresh();
 }
 function renderPanel(h) {
   const ty = TYPES[h.type];
@@ -1142,25 +1261,148 @@ function renderPanel(h) {
   const swatch = new THREE.Color().setRGB(c[0], c[1], c[2], THREE.LinearSRGBColorSpace).getStyle();
   const gfa = ty.gfaSqft, roof = ty.roofSqft;
   const per = ty.units > 1 ? ` <small>(${t('perUnit')})</small>` : '';
+  const st = statusOf(h), sinfo = state.status[h.pid] || {};
+  const prop = h.prop || {};
   $('panel-img').src = imageUrl(`assets/img/house_${img.index}.jpg`);
   $('panel-img').alt = `${ty.label[state.lang]} — ${imgColor}`;
   $('panel-imgnote').textContent = img.exact ? t('imgExact') : `${t('imgNote')} ${imgColor}`;
-  $('panel-title').textContent = `${t('house')} ${h.num}`;
-  $('panel-sub').innerHTML = `${t('lot')} ${h.lotNum} · <span class="dot" style="background:${ty.hex}"></span>${ty.label[state.lang]}`;
+  $('panel-title').textContent = `${t('lot')} ${h.code}`;
+  const badge = $('panel-status'); badge.className = `status-badge ${st}`; badge.textContent = STATUS[st].label[state.lang];
+  $('panel-sub').innerHTML = `${prop.planName ? `<b>${prop.planName}</b> · ` : ''}<span class="dot" style="background:${ty.hex}"></span>${ty.label[state.lang]} · ${t('parcel')} ${h.parcel}${prop.parcelInferred ? ` <span class="inferred-note">(${t('inferred')})</span>` : ''}`;
+  $('panel-pid').textContent = h.pid || h.id;
+  $('panel-updated').textContent = sinfo.updatedAt ? ` · ${t('lastUpdate')} ${new Date(sinfo.updatedAt).toLocaleDateString(state.lang === 'pt' ? 'pt-BR' : 'en-GB')}` : '';
   $('panel-body').innerHTML = `
     <div class="facts">
-      <div class="fact"><span class="k">${t('type')}</span><span class="v">${ty.label[state.lang]}</span></div>
-      <div class="fact"><span class="k">${state.lang === 'pt' ? 'Programa' : 'Layout'}</span><span class="v">${ty.beds} ${t('beds')} · ${ty.baths} ${t('baths')}${ty.units > 1 ? ` · 2 ${t('units')}` : ''}</span></div>
+      <div class="fact"><span class="k">${t('houseModel')}</span><span class="v">${prop.planName || '–'} <em>${state.lang === 'pt' ? 'Opção' : 'Option'} ${state.registry?.plans?.[h.type]?.option ?? '–'} · ${h.kind === 'duplex' ? 'Duplex' : (state.lang === 'pt' ? 'Casa isolada' : 'Single house')}</em></span></div>
+      <div class="fact"><span class="k">${state.lang === 'pt' ? 'Programa' : 'Layout'}</span><span class="v">${ty.beds} ${t('beds')} · ${ty.baths} ${t('baths')}${ty.units > 1 ? ` <em>2 ${t('units')}</em>` : ''}</span></div>
       <div class="fact"><span class="k">${t('gfa')}${per}</span><span class="v">${fmt(gfa)} ${t('sqft')} <em>${fmt(gfa / SQFT_PER_M2, 1)} ${t('sqm')}</em></span></div>
       <div class="fact"><span class="k">${t('roof')}${per}</span><span class="v">${fmt(roof)} ${t('sqft')} <em>${fmt(roof / SQFT_PER_M2, 1)} ${t('sqm')}</em></span></div>
       <div class="fact"><span class="k">${t('lotArea')}${h.lots.length > 1 ? ` <small>(${h.lots.length} ${t('lots')})</small>` : ''}</span><span class="v">${fmt(h.lotArea == null ? null : h.lotArea * SQFT_PER_M2)} ${t('sqft')} <em>${fmt(h.lotArea, 1)} ${t('sqm')}</em></span></div>
       <div class="fact"><span class="k">${t('facade')}</span><span class="v"><span class="swatch" style="background:${swatch}"></span>${COLOR_LABEL[h.color] || h.color}</span></div>
-      <div class="fact"><span class="k">${t('model')}</span><span class="v">Casa ${h.model} · ${h.kind === 'duplex' ? 'Duplex' : 'Single'} · PDF: ${h.pdf}</span></div>
+      <div class="fact wide"><span class="k">${t('model')}</span><span class="v">${h.id} · Casa ${h.model} · ${t('lot')} ${h.lotIndex.split(' ').join(' + ')}${h.prevLot ? ` <em>${state.lang === 'pt' ? 'lote anterior' : 'previous lot'}: ${h.prevLot.replace(/\D+/g, '')}</em>` : ''}</span></div>
     </div>
     <p class="source">${t('source')}</p>`;
+  const plan = prop.plan || state.registry?.plans?.[h.type]?.file;
+  $('panel-plan').src = plan ? imageUrl(`assets/plans/${plan}`) : '';
+  $('panel-plan-name').textContent = plan ? `${prop.planName || ''} · ${ty.beds} ${t('beds')} · ${ty.baths} ${t('baths')}${ty.units > 1 ? ` · ${t('perUnit')}` : ''}` : '';
+  // sales actions: reserve only while available; "sold" for staff; nothing writes without a backend
+  const canWrite = api.hasBackend();
+  $('btn-reserve').textContent = st === 'reserved' ? t('cancelReservation') : t('reserve');
+  $('btn-sold').textContent = st === 'sold' ? t('release') : t('markSold');
+  $('btn-reserve').disabled = !canWrite || st === 'sold';
+  $('btn-sold').disabled = !canWrite;
+  $('btn-reserve').title = canWrite ? '' : t('readOnly');
+  $('btn-sold').title = canWrite ? '' : t('readOnly');
   $('panel').classList.add('open');
 }
+
+// ---------------------------------------------------------------------------
+// Sales actions: lead form (I'm interested), reserve / sold with a staff password checked server-side
+// ---------------------------------------------------------------------------
+let toastTimer = null;
+function toast(msg, ms = 3200) {
+  const el = $('toast'); el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+}
+function openModal(html) { $('modal-content').innerHTML = html; $('modal').hidden = false; const f = $('modal').querySelector('input, textarea'); if (f) setTimeout(() => f.focus(), 50); }
+function closeModal() { $('modal').hidden = true; $('modal-content').innerHTML = ''; }
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+function leadContext(h) {
+  return { pid: h.pid, code: h.code, house: h.id, model: h.prop?.planName || `Casa ${h.model}`, type: TYPES[h.type].label.en, parcel: h.parcel, page: location.href, lang: state.lang, timestamp: new Date().toISOString() };
+}
+function openLeadForm(h) {
+  const ctx = leadContext(h);
+  openModal(`
+    <h2>${t('leadTitle')}</h2>
+    <p class="intro">${t('leadIntro')}</p>
+    <div class="ref"><b>${t('lot')} ${esc(h.code)}</b> · ${esc(ctx.model)} · ${t('parcel')} ${esc(h.parcel)} · <code>${esc(h.pid)}</code></div>
+    <form id="lead-form">
+      <div class="field"><label for="lead-name">${t('name')}</label><input id="lead-name" name="name" required autocomplete="name" /></div>
+      <div class="field"><label for="lead-email">${t('email')}</label><input id="lead-email" name="email" type="email" required autocomplete="email" /></div>
+      <div class="field"><label for="lead-phone">${t('phone')}</label><input id="lead-phone" name="phone" type="tel" autocomplete="tel" /></div>
+      <div class="field"><label for="lead-msg">${t('message')}</label><textarea id="lead-msg" name="message"></textarea></div>
+      <div class="field hp" aria-hidden="true"><label for="lead-web">Website</label><input id="lead-web" name="website" tabindex="-1" autocomplete="off" /></div>
+      <div class="form-msg" id="lead-msg-out"></div>
+      <div class="modal-actions"><button type="button" class="btn ghost" id="lead-cancel">${t('cancel')}</button><button type="submit" class="btn primary" id="lead-send">${t('send')}</button></div>
+    </form>`);
+  $('lead-cancel').onclick = closeModal;
+  $('lead-form').onsubmit = async (ev) => {
+    ev.preventDefault();
+    const fd = new FormData(ev.target);
+    const lead = { ...ctx, name: fd.get('name'), email: fd.get('email'), phone: fd.get('phone'), message: fd.get('message'), website: fd.get('website') };
+    const out = $('lead-msg-out'); const btn = $('lead-send');
+    if (!api.hasBackend()) {
+      // no server yet: hand the lead to the visitor's e-mail client with everything pre-filled
+      const subject = `Legacy Heights - ${t('lot')} ${h.code} - ${lead.name}`;
+      const body = `${t('interested')}: ${t('lot')} ${h.code} (${ctx.model}, ${t('parcel')} ${h.parcel})\nID: ${h.pid}\n\n${t('name')}: ${lead.name}\n${t('email')}: ${lead.email}\n${t('phone')}: ${lead.phone || '-'}\n\n${lead.message || ''}\n\n${ctx.page}`;
+      window.location.href = `mailto:${BACKEND.salesEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      out.className = 'form-msg ok'; out.textContent = t('leadSent');
+      setTimeout(closeModal, 1800);
+      return;
+    }
+    btn.disabled = true; btn.textContent = t('sending'); out.className = 'form-msg'; out.textContent = '';
+    try {
+      await api.interest(lead);
+      out.className = 'form-msg ok'; out.textContent = t('leadSent');
+      setTimeout(closeModal, 1800);
+    } catch (e) {
+      out.className = 'form-msg err'; out.textContent = `${t('leadFailed')} ${BACKEND.salesEmail}`;
+      btn.disabled = false; btn.textContent = t('send');
+    }
+  };
+}
+function openStatusChange(h, action) {
+  if (!api.hasBackend()) { toast(t('readOnly')); return; }
+  const title = action === 'reserve' ? t('reserve') : action === 'sold' ? t('markSold') : (statusOf(h) === 'reserved' ? t('cancelReservation') : t('release'));
+  openModal(`
+    <h2>${title}</h2>
+    <p class="intro">${action === 'reserve' ? t('authIntro') : t('authIntroAdmin')}</p>
+    <div class="ref"><b>${t('lot')} ${esc(h.code)}</b> · ${esc(h.prop?.planName || '')} · <code>${esc(h.pid)}</code></div>
+    <form id="auth-form">
+      <div class="field"><label for="auth-by">${t('name')}</label><input id="auth-by" name="by" autocomplete="name" /></div>
+      <div class="field"><label for="auth-pw">${t('password')}</label><input id="auth-pw" name="password" type="password" required autocomplete="current-password" /></div>
+      <div class="form-msg" id="auth-msg"></div>
+      <div class="modal-actions"><button type="button" class="btn ghost" id="auth-cancel">${t('cancel')}</button><button type="submit" class="btn primary" id="auth-ok">${t('confirm')}</button></div>
+    </form>`);
+  $('auth-cancel').onclick = closeModal;
+  $('auth-form').onsubmit = async (ev) => {
+    ev.preventDefault();
+    const fd = new FormData(ev.target); const out = $('auth-msg'); const btn = $('auth-ok');
+    btn.disabled = true; btn.textContent = t('sending'); out.className = 'form-msg'; out.textContent = '';
+    try {
+      const fn = action === 'reserve' ? api.reserve : action === 'sold' ? api.markSold : api.release;
+      const res = await fn(h.pid, h.code, fd.get('password'), fd.get('by'));
+      if (res.statuses) state.status = res.statuses; else if (res.status) state.status[h.pid] = res.status;
+      buildStatusLines(); buildLegend(); renderPanel(h);
+      toast(action === 'reserve' ? t('reserveOk') : action === 'sold' ? t('soldOk') : t('releaseOk'));
+      closeModal();
+    } catch (e) {
+      const msg = e.message === 'unauthorized' ? t('wrongPassword') : e.message === 'not-available' ? t('notAvailable') : e.message === 'throttled' ? t('throttled') : e.message === 'busy' ? t('busy') : t('networkError');
+      out.className = 'form-msg err'; out.textContent = msg;
+      btn.disabled = false; btn.textContent = t('confirm');
+      if (e.message === 'not-available') refreshStatuses();
+    }
+  };
+}
+function setNight(on) {
+  state.night = on;
+  document.body.classList.toggle('night', on);
+  $('btn-night').textContent = on ? t('day') : t('night');
+  $('btn-night').classList.toggle('active', on);
+  if (night) night.apply(on);
+  if (cars) cars.setNight(on);
+}
+async function openRegionMap() {
+  $('map-modal').hidden = false;
+  if (!regionMap) {
+    regionMap = createRegionMap({ canvas: $('map-canvas'), listEl: $('map-list'), meta: state.satMeta || {}, loadJson, imageUrl, t, lang: () => state.lang, siteBounds: state.data.bounds,
+      onStatus: (busy) => { if (busy) $('map-list').innerHTML = `<div class="muted" style="padding:8px">${t('loading')}</div>`; } });
+  }
+  try { await regionMap.open(); } catch (e) { console.warn('region map failed', e); $('map-list').innerHTML = `<div class="muted" style="padding:8px">${t('networkError')}</div>`; }
+}
 function handleHash() {
+  const p = location.hash.match(/p-([0-9a-f]{8,})/i);
+  if (p) { const h = state.houses.find((x) => x.pid === `LH_${p[1]}`); if (h) { select(h, true); return; } }
   const m = location.hash.match(/casa-(\d+)/);
   if (!m) return;
   const h = state.byId.get(`Casa ${m[1].padStart(3, '0')}`);
@@ -1171,9 +1413,15 @@ function handleHash() {
 // Loop
 // ---------------------------------------------------------------------------
 const compass = document.getElementById('compass');
+let lastFrame = 0;
 function animate(now) {
   requestAnimationFrame(animate);
-  updateFlight(now || performance.now());
+  now = now || performance.now();
+  const dt = lastFrame ? (now - lastFrame) / 1000 : 0.016;
+  lastFrame = now;
+  updateFlight(now);
+  if (cars) cars.update(dt);
+  if (night) night.update();
   if (controls.enabled) controls.update();
   rebuildInstances();
   camera.updateMatrixWorld();
@@ -1189,9 +1437,10 @@ window.addEventListener('resize', () => {
   if (csm) csm.updateFrustums();
   const res = new THREE.Vector2(window.innerWidth, window.innerHeight);
   if (hoverLine) { hoverLine.material.resolution.copy(res); selectLine.material.resolution.copy(res); }
+  if (statusLines) statusLines.material.resolution.copy(res);
 });
 
-window.__app = { scene, camera, renderer, controls, state, houseGroups, proxies, modelInfo, select, flyTo, setOverview, SUN_DIR, MATS, get csm() { return csm; }, get composer() { return composer; }, get gtao() { return gtao; } };
+window.__app = { scene, camera, renderer, controls, state, houseGroups, proxies, modelInfo, select, flyTo, setOverview, SUN_DIR, MATS, setNight, openRegionMap, get night() { return night; }, get cars() { return cars; }, get regionMap() { return regionMap; }, get csm() { return csm; }, get composer() { return composer; }, get gtao() { return gtao; } };
 
 init().catch((err) => {
   console.error(err);

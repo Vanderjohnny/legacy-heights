@@ -1,0 +1,879 @@
+{
+ "generated": "2026-09-09",
+ "site": {
+  "lat": 13.090829480728553,
+  "lng": -59.498962429377805,
+  "name": "Legacy Heights"
+ },
+ "attribution": "POI data © OpenStreetMap contributors (ODbL); routing: OSRM demo server",
+ "categories": {
+  "airport": {
+   "en": "Airport",
+   "pt": "Aeroporto"
+  },
+  "supermarket": {
+   "en": "Supermarket",
+   "pt": "Supermercado"
+  },
+  "restaurant": {
+   "en": "Restaurant",
+   "pt": "Restaurante"
+  },
+  "hospital": {
+   "en": "Hospital / clinic",
+   "pt": "Hospital / clínica"
+  },
+  "school": {
+   "en": "School",
+   "pt": "Escola"
+  },
+  "pharmacy": {
+   "en": "Pharmacy",
+   "pt": "Farmácia"
+  },
+  "park": {
+   "en": "Park",
+   "pt": "Parque"
+  },
+  "beach": {
+   "en": "Beach",
+   "pt": "Praia"
+  }
+ },
+ "pois": [
+  {
+   "id": "w52494538",
+   "name": "Grantley Adams International Airport",
+   "cat": "airport",
+   "lat": 13.077288,
+   "lng": -59.491536,
+   "dist_km": 1.71,
+   "tags": {
+    "aeroway": "aerodrome",
+    "iata": "BGI"
+   },
+   "road_km": 2.9,
+   "drive_min": 8,
+   "x": 1062.0,
+   "y": -1181.1
+  },
+  {
+   "id": "n4922753130",
+   "name": "Massy Supermarket",
+   "cat": "supermarket",
+   "lat": 13.084816,
+   "lng": -59.502266,
+   "dist_km": 0.76,
+   "tags": {
+    "shop": "supermarket",
+    "opening_hours": "Mo-Sa 08:00-20:00; Su 09:00-14:00"
+   },
+   "road_km": 0.9,
+   "drive_min": 5,
+   "x": -101.9,
+   "y": -348.6
+  },
+  {
+   "id": "w384008440",
+   "name": "Dee Jay's",
+   "cat": "supermarket",
+   "lat": 13.077616,
+   "lng": -59.514882,
+   "dist_km": 2.27,
+   "tags": {
+    "shop": "supermarket",
+    "phone": "418 2222",
+    "addr:street": "Pilgrim Road"
+   },
+   "road_km": 2.9,
+   "drive_min": 7,
+   "x": -1469.9,
+   "y": -1145.4
+  },
+  {
+   "id": "w383899070",
+   "name": "TriMart Express",
+   "cat": "supermarket",
+   "lat": 13.093342,
+   "lng": -59.46624,
+   "dist_km": 3.56,
+   "tags": {
+    "shop": "supermarket",
+    "opening_hours": "Su-Th 08:00-20:00; Fr-Sa 08:00-21:00",
+    "website": "https://www.facebook.com/ChannellandTrimartSupermarkets/",
+    "phone": "+1 246 430 8000",
+    "addr:street": "St. Martin's Main Road"
+   },
+   "road_km": 5.2,
+   "drive_min": 10,
+   "x": 3804.7,
+   "y": 595.8
+  },
+  {
+   "id": "w945035363",
+   "name": "J.B. Simpson Complex",
+   "cat": "supermarket",
+   "lat": 13.115608,
+   "lng": -59.475223,
+   "dist_km": 3.77,
+   "tags": {
+    "shop": "mall"
+   },
+   "road_km": 5.4,
+   "drive_min": 11,
+   "x": 2829.7,
+   "y": 3058.8
+  },
+  {
+   "id": "w383866943",
+   "name": "Massy Stores Express",
+   "cat": "supermarket",
+   "lat": 13.118194,
+   "lng": -59.477827,
+   "dist_km": 3.81,
+   "tags": {
+    "shop": "supermarket",
+    "addr:street": "Highway 5"
+   },
+   "road_km": 5.1,
+   "drive_min": 11,
+   "x": 2547.3,
+   "y": 3344.8
+  },
+  {
+   "id": "n4922719981",
+   "name": "Shop Smart Express",
+   "cat": "supermarket",
+   "lat": 13.11777,
+   "lng": -59.473906,
+   "dist_km": 4.04,
+   "tags": {
+    "shop": "supermarket"
+   },
+   "road_km": 5.4,
+   "drive_min": 11,
+   "x": 2972.5,
+   "y": 3298.0
+  },
+  {
+   "id": "w383797240",
+   "name": "Emerald City Supermarket",
+   "cat": "supermarket",
+   "lat": 13.116841,
+   "lng": -59.475203,
+   "dist_km": 3.87,
+   "tags": {
+    "shop": "supermarket",
+    "addr:street": "Highway 5"
+   },
+   "road_km": 5.4,
+   "drive_min": 12,
+   "x": 2831.9,
+   "y": 3195.2
+  },
+  {
+   "id": "n5810789255",
+   "name": "Douglas Minimart",
+   "cat": "supermarket",
+   "lat": 13.051616,
+   "lng": -59.515459,
+   "dist_km": 4.71,
+   "tags": {
+    "shop": "supermarket"
+   },
+   "road_km": 7.0,
+   "drive_min": 13,
+   "x": -1532.0,
+   "y": -4021.8
+  },
+  {
+   "id": "n12516140265",
+   "name": "BBQ House",
+   "cat": "restaurant",
+   "lat": 13.085232,
+   "lng": -59.502257,
+   "dist_km": 0.72,
+   "tags": {
+    "amenity": "restaurant",
+    "phone": "+12477477"
+   },
+   "road_km": 0.9,
+   "drive_min": 5,
+   "x": -100.9,
+   "y": -302.6
+  },
+  {
+   "id": "n12516132153",
+   "name": "The Urban Kitchen",
+   "cat": "restaurant",
+   "lat": 13.085131,
+   "lng": -59.502265,
+   "dist_km": 0.73,
+   "tags": {
+    "amenity": "restaurant",
+    "opening_hours": "Mo-Th 11:00-21:00; Sa,Su 11:00-22:00"
+   },
+   "road_km": 1.0,
+   "drive_min": 5,
+   "x": -101.8,
+   "y": -313.7
+  },
+  {
+   "id": "n12516144408",
+   "name": "Chutney's",
+   "cat": "restaurant",
+   "lat": 13.085101,
+   "lng": -59.502265,
+   "dist_km": 0.73,
+   "tags": {
+    "amenity": "restaurant",
+    "opening_hours": "Mo-Th 11:00-21:00; Fr-Su 11:00-22:00"
+   },
+   "road_km": 1.0,
+   "drive_min": 5,
+   "x": -101.8,
+   "y": -317.1
+  },
+  {
+   "id": "n12516142314",
+   "name": "Dragon House",
+   "cat": "restaurant",
+   "lat": 13.085011,
+   "lng": -59.502264,
+   "dist_km": 0.74,
+   "tags": {
+    "amenity": "restaurant"
+   },
+   "road_km": 1.0,
+   "drive_min": 5,
+   "x": -101.6,
+   "y": -327.0
+  },
+  {
+   "id": "w995820334",
+   "name": "Terminal G Bar & Lounge",
+   "cat": "restaurant",
+   "lat": 13.082705,
+   "lng": -59.486892,
+   "dist_km": 1.59,
+   "tags": {
+    "amenity": "restaurant"
+   },
+   "road_km": 2.3,
+   "drive_min": 6,
+   "x": 1565.5,
+   "y": -581.7
+  },
+  {
+   "id": "w384009881",
+   "name": "Stardust",
+   "cat": "restaurant",
+   "lat": 13.076785,
+   "lng": -59.515271,
+   "dist_km": 2.36,
+   "tags": {
+    "amenity": "restaurant",
+    "addr:street": "Pilgrim Road"
+   },
+   "road_km": 3.0,
+   "drive_min": 7,
+   "x": -1512.1,
+   "y": -1237.3
+  },
+  {
+   "id": "w384005153",
+   "name": "Flash N Sports Bar & Restaurant",
+   "cat": "restaurant",
+   "lat": 13.078835,
+   "lng": -59.508405,
+   "dist_km": 1.68,
+   "tags": {
+    "amenity": "restaurant",
+    "addr:street": "Pilgrim Road"
+   },
+   "road_km": 3.5,
+   "drive_min": 8,
+   "x": -767.5,
+   "y": -1010.4
+  },
+  {
+   "id": "n13809703701",
+   "name": "DreadHop Brewing",
+   "cat": "restaurant",
+   "lat": 13.066611,
+   "lng": -59.527501,
+   "dist_km": 4.1,
+   "tags": {
+    "amenity": "restaurant"
+   },
+   "road_km": 5.6,
+   "drive_min": 10,
+   "x": -2838.3,
+   "y": -2363.1
+  },
+  {
+   "id": "w899631479",
+   "name": "Hoodees",
+   "cat": "restaurant",
+   "lat": 13.11758,
+   "lng": -59.477852,
+   "dist_km": 3.75,
+   "tags": {
+    "amenity": "restaurant"
+   },
+   "road_km": 5.1,
+   "drive_min": 11,
+   "x": 2544.6,
+   "y": 3276.8
+  },
+  {
+   "id": "w383797885",
+   "name": "Royal Chinese Restaurant & Bar",
+   "cat": "restaurant",
+   "lat": 13.117405,
+   "lng": -59.473725,
+   "dist_km": 4.03,
+   "tags": {
+    "amenity": "restaurant",
+    "phone": "271 1037",
+    "addr:street": "Highway 5"
+   },
+   "road_km": 5.4,
+   "drive_min": 11,
+   "x": 2992.1,
+   "y": 3257.6
+  },
+  {
+   "id": "w386262035",
+   "name": "Coverley Medical Centre",
+   "cat": "hospital",
+   "lat": 13.085534,
+   "lng": -59.501721,
+   "dist_km": 0.66,
+   "tags": {
+    "amenity": "clinic",
+    "opening_hours": "Mo-Su,PH 07:00-19:00"
+   },
+   "road_km": 0.8,
+   "drive_min": 4,
+   "x": -42.8,
+   "y": -269.1
+  },
+  {
+   "id": "w383795662",
+   "name": "St. Philip Polyclinic",
+   "cat": "hospital",
+   "lat": 13.118084,
+   "lng": -59.476286,
+   "dist_km": 3.9,
+   "tags": {
+    "amenity": "clinic",
+    "phone": "+1 (246) 423-6231",
+    "addr:street": "Highway 5"
+   },
+   "road_km": 5.3,
+   "drive_min": 11,
+   "x": 2714.4,
+   "y": 3332.6
+  },
+  {
+   "id": "w386214408",
+   "name": "Oistins Family Clinic",
+   "cat": "hospital",
+   "lat": 13.062122,
+   "lng": -59.538622,
+   "dist_km": 5.35,
+   "tags": {
+    "amenity": "clinic",
+    "phone": "428 3427",
+    "addr:street": "Highway U"
+   },
+   "road_km": 6.5,
+   "drive_min": 11,
+   "x": -4044.3,
+   "y": -2859.8
+  },
+  {
+   "id": "n10914568746",
+   "name": "Urgent Care at The Estates",
+   "cat": "hospital",
+   "lat": 13.108612,
+   "lng": -59.543198,
+   "dist_km": 5.18,
+   "tags": {
+    "amenity": "clinic"
+   },
+   "road_km": 7.0,
+   "drive_min": 12,
+   "x": -4541.0,
+   "y": 2283.3
+  },
+  {
+   "id": "w306442061",
+   "name": "Randall Phillips Polyclinic",
+   "cat": "hospital",
+   "lat": 13.062149,
+   "lng": -59.540746,
+   "dist_km": 5.54,
+   "tags": {
+    "amenity": "clinic"
+   },
+   "road_km": 6.5,
+   "drive_min": 12,
+   "x": -4274.7,
+   "y": -2856.9
+  },
+  {
+   "id": "w518968174",
+   "name": "Maxwell Medical Clinic",
+   "cat": "hospital",
+   "lat": 13.067736,
+   "lng": -59.555429,
+   "dist_km": 6.63,
+   "tags": {
+    "amenity": "clinic"
+   },
+   "road_km": 8.1,
+   "drive_min": 13,
+   "x": -5867.2,
+   "y": -2238.9
+  },
+  {
+   "id": "w386265662",
+   "name": "Gordon Walters Primary School",
+   "cat": "school",
+   "lat": 13.096268,
+   "lng": -59.494488,
+   "dist_km": 0.77,
+   "tags": {
+    "amenity": "school",
+    "addr:street": "Highway P"
+   },
+   "road_km": 2.6,
+   "drive_min": 7,
+   "x": 741.3,
+   "y": 918.6
+  },
+  {
+   "id": "w1462717907",
+   "name": "St.Bartholomew Primary School",
+   "cat": "school",
+   "lat": 13.074913,
+   "lng": -59.514177,
+   "dist_km": 2.42,
+   "tags": {
+    "amenity": "school"
+   },
+   "road_km": 3.4,
+   "drive_min": 8,
+   "x": -1393.4,
+   "y": -1444.4
+  },
+  {
+   "id": "w383898689",
+   "name": "St Martin's - Mangrove Primary School",
+   "cat": "school",
+   "lat": 13.094946,
+   "lng": -59.466153,
+   "dist_km": 3.58,
+   "tags": {
+    "amenity": "school",
+    "addr:street": "St. Martin's Main Road"
+   },
+   "road_km": 5.4,
+   "drive_min": 10,
+   "x": 3814.1,
+   "y": 773.3
+  },
+  {
+   "id": "w488867378",
+   "name": "Frank Walcott Labour College",
+   "cat": "school",
+   "lat": 13.09869,
+   "lng": -59.470217,
+   "dist_km": 3.23,
+   "tags": {
+    "amenity": "college",
+    "website": "https://www.bwu-bb.org/",
+    "addr:street": "Mangrove, St. Philip"
+   },
+   "road_km": 5.6,
+   "drive_min": 11,
+   "x": 3373.2,
+   "y": 1187.3
+  },
+  {
+   "id": "w383641819",
+   "name": "Reynold Weekes Primary School",
+   "cat": "school",
+   "lat": 13.108936,
+   "lng": -59.470016,
+   "dist_km": 3.73,
+   "tags": {
+    "amenity": "school",
+    "addr:street": "Four Roads"
+   },
+   "road_km": 6.5,
+   "drive_min": 11,
+   "x": 3394.6,
+   "y": 2320.8
+  },
+  {
+   "id": "w383795663",
+   "name": "Princess Margaret Secondary School",
+   "cat": "school",
+   "lat": 13.118876,
+   "lng": -59.475219,
+   "dist_km": 4.04,
+   "tags": {
+    "amenity": "school",
+    "addr:street": "Highway 5"
+   },
+   "road_km": 5.3,
+   "drive_min": 12,
+   "x": 2830.0,
+   "y": 3420.3
+  },
+  {
+   "id": "w1196439604",
+   "name": "Barbados Vocational Training Board (Sayes Court)",
+   "cat": "school",
+   "lat": 13.056674,
+   "lng": -59.523056,
+   "dist_km": 4.61,
+   "tags": {
+    "amenity": "school",
+    "addr:street": "Sayes Court"
+   },
+   "road_km": 6.3,
+   "drive_min": 12,
+   "x": -2356.0,
+   "y": -3462.4
+  },
+  {
+   "id": "w386224216",
+   "name": "St. Christopher's Primary School",
+   "cat": "school",
+   "lat": 13.053474,
+   "lng": -59.517775,
+   "dist_km": 4.63,
+   "tags": {
+    "amenity": "school"
+   },
+   "road_km": 7.0,
+   "drive_min": 13,
+   "x": -1783.2,
+   "y": -3816.3
+  },
+  {
+   "id": "n4755488222",
+   "name": "Unique Pharmacy",
+   "cat": "pharmacy",
+   "lat": 13.093276,
+   "lng": -59.465724,
+   "dist_km": 3.61,
+   "tags": {
+    "amenity": "pharmacy",
+    "addr:street": "St. Martin's Main Road"
+   },
+   "road_km": 5.1,
+   "drive_min": 10,
+   "x": 3860.7,
+   "y": 588.5
+  },
+  {
+   "id": "w384036566",
+   "name": "Joe's Pharmacy",
+   "cat": "pharmacy",
+   "lat": 13.064434,
+   "lng": -59.544148,
+   "dist_km": 5.71,
+   "tags": {
+    "amenity": "pharmacy",
+    "opening_hours": "Mo-Fr 09:00-17:00; Sa 09:00-14:00",
+    "addr:street": "Oistins Main Road"
+   },
+   "road_km": 6.8,
+   "drive_min": 11,
+   "x": -4643.7,
+   "y": -2604.1
+  },
+  {
+   "id": "n10914568745",
+   "name": "iMart Pharmacy",
+   "cat": "pharmacy",
+   "lat": 13.108634,
+   "lng": -59.543473,
+   "dist_km": 5.21,
+   "tags": {
+    "amenity": "pharmacy",
+    "addr:street": "The Esates at St. George"
+   },
+   "road_km": 7.0,
+   "drive_min": 12,
+   "x": -4570.8,
+   "y": 2285.8
+  },
+  {
+   "id": "n450705109",
+   "name": "Lewis Drug Mart",
+   "cat": "pharmacy",
+   "lat": 13.075058,
+   "lng": -59.590174,
+   "dist_km": 10.03,
+   "tags": {
+    "amenity": "pharmacy",
+    "opening_hours": "Mo-Fr 08:00-17:30; Sa 09:00-17:00; Su 09:00-12:00",
+    "addr:street": "Highway 7"
+   },
+   "road_km": 12.1,
+   "drive_min": 15,
+   "x": -9635.3,
+   "y": -1428.6
+  },
+  {
+   "id": "n4058351344",
+   "name": "Holborn Pharmacy",
+   "cat": "pharmacy",
+   "lat": 13.099134,
+   "lng": -59.600689,
+   "dist_km": 11.06,
+   "tags": {
+    "amenity": "pharmacy"
+   },
+   "road_km": 14.0,
+   "drive_min": 18,
+   "x": -10775.3,
+   "y": 1235.1
+  },
+  {
+   "id": "n5202548258",
+   "name": "Dasae Pharmacy",
+   "cat": "pharmacy",
+   "lat": 13.096932,
+   "lng": -59.60187,
+   "dist_km": 11.17,
+   "tags": {
+    "amenity": "pharmacy"
+   },
+   "road_km": 13.7,
+   "drive_min": 18,
+   "x": -10903.4,
+   "y": 991.5
+  },
+  {
+   "id": "w1144238734",
+   "name": "Lowlands Park",
+   "cat": "park",
+   "lat": 13.084692,
+   "lng": -59.511875,
+   "dist_km": 1.56,
+   "tags": {
+    "leisure": "park",
+    "addr:street": "Lowlands Park"
+   },
+   "road_km": 2.9,
+   "drive_min": 8,
+   "x": -1143.9,
+   "y": -362.5
+  },
+  {
+   "id": "w383900257",
+   "name": "Oldbury Woods",
+   "cat": "park",
+   "lat": 13.087861,
+   "lng": -59.475367,
+   "dist_km": 2.58,
+   "tags": {
+    "leisure": "park"
+   },
+   "road_km": 3.8,
+   "drive_min": 8,
+   "x": 2815.1,
+   "y": -10.9
+  },
+  {
+   "id": "w511573428",
+   "name": "Balls Park Events and Entertainment Centre",
+   "cat": "park",
+   "lat": 13.084198,
+   "lng": -59.526247,
+   "dist_km": 3.05,
+   "tags": {
+    "leisure": "park"
+   },
+   "road_km": 3.5,
+   "drive_min": 8,
+   "x": -2702.5,
+   "y": -417.4
+  },
+  {
+   "id": "w1487852365",
+   "name": "Oldbury Terrace Community Park",
+   "cat": "park",
+   "lat": 13.09583,
+   "lng": -59.470944,
+   "dist_km": 3.09,
+   "tags": {
+    "leisure": "park"
+   },
+   "road_km": 4.8,
+   "drive_min": 10,
+   "x": 3294.5,
+   "y": 870.9
+  },
+  {
+   "id": "w1075628038",
+   "name": "Newton Slave Burial Ground",
+   "cat": "park",
+   "lat": 13.087353,
+   "lng": -59.533989,
+   "dist_km": 3.81,
+   "tags": {
+    "leisure": "park",
+    "opening_hours": "24/7",
+    "addr:street": "Newton Plantation"
+   },
+   "road_km": 4.8,
+   "drive_min": 10,
+   "x": -3542.1,
+   "y": -68.5
+  },
+  {
+   "id": "w1004375370",
+   "name": "St. Martins Terrace Recreation Park",
+   "cat": "park",
+   "lat": 13.097871,
+   "lng": -59.467278,
+   "dist_km": 3.52,
+   "tags": {
+    "leisure": "park"
+   },
+   "road_km": 5.8,
+   "drive_min": 11,
+   "x": 3692.0,
+   "y": 1096.8
+  },
+  {
+   "id": "w28598916",
+   "name": "Enterprise (Miami) Beach",
+   "cat": "beach",
+   "lat": 13.060551,
+   "lng": -59.539732,
+   "dist_km": 5.55,
+   "tags": {
+    "natural": "beach"
+   },
+   "road_km": 6.7,
+   "drive_min": 12,
+   "x": -4164.7,
+   "y": -3033.7
+  },
+  {
+   "id": "w28684637",
+   "name": "Welches Beach",
+   "cat": "beach",
+   "lat": 13.064632,
+   "lng": -59.548036,
+   "dist_km": 6.06,
+   "tags": {
+    "natural": "beach"
+   },
+   "road_km": 7.3,
+   "drive_min": 12,
+   "x": -5065.4,
+   "y": -2582.2
+  },
+  {
+   "id": "w26380396",
+   "name": "Foul Bay",
+   "cat": "beach",
+   "lat": 13.099023,
+   "lng": -59.450412,
+   "dist_km": 5.34,
+   "tags": {
+    "natural": "beach"
+   },
+   "road_km": 7.2,
+   "drive_min": 13,
+   "x": 5520.9,
+   "y": 1225.0
+  },
+  {
+   "id": "w26283455",
+   "name": "Long Bay Beach",
+   "cat": "beach",
+   "lat": 13.060436,
+   "lng": -59.498828,
+   "dist_km": 3.38,
+   "tags": {
+    "natural": "beach"
+   },
+   "road_km": 6.7,
+   "drive_min": 14,
+   "x": 271.6,
+   "y": -3045.7
+  },
+  {
+   "id": "w520192582",
+   "name": "Crane Beach",
+   "cat": "beach",
+   "lat": 13.106655,
+   "lng": -59.443666,
+   "dist_km": 6.24,
+   "tags": {
+    "leisure": "beach_resort",
+    "natural": "beach"
+   },
+   "road_km": 9.1,
+   "drive_min": 15,
+   "x": 6252.0,
+   "y": 2069.6
+  },
+  {
+   "id": "w305644388",
+   "name": "Silver Sands Beach",
+   "cat": "beach",
+   "lat": 13.046302,
+   "lng": -59.522282,
+   "dist_km": 5.56,
+   "tags": {
+    "natural": "beach"
+   },
+   "road_km": 8.3,
+   "drive_min": 16,
+   "x": -2271.9,
+   "y": -4609.8
+  },
+  {
+   "id": "w480469227",
+   "name": "Ginger Bay (Beachy Head)",
+   "cat": "beach",
+   "lat": 13.110936,
+   "lng": -59.441182,
+   "dist_km": 6.65,
+   "tags": {
+    "natural": "beach"
+   },
+   "road_km": 9.3,
+   "drive_min": 16,
+   "x": 6521.2,
+   "y": 2543.4
+  },
+  {
+   "id": "w28684396",
+   "name": "Beachy Head",
+   "cat": "beach",
+   "lat": 13.113097,
+   "lng": -59.439849,
+   "dist_km": 6.86,
+   "tags": {
+    "natural": "beach"
+   },
+   "road_km": 10.7,
+   "drive_min": 18,
+   "x": 6665.6,
+   "y": 2782.5
+  }
+ ]
+}
