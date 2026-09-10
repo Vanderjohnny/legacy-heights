@@ -22,9 +22,12 @@ h1, h2, h3, p { margin: 0; }
 /* loading */
 /* loading: the aerial panorama of the site (assets/img/loading.jpg) with the logotype on it */
 #loading { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: #24384a url(assets/img/loading.jpg) center / cover no-repeat; transition: opacity 0.8s ease; }
-#loading::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0.38) 0%, rgba(0,0,0,0.12) 45%, rgba(0,0,0,0) 75%); pointer-events: none; }
+#loading::before { content: ''; position: absolute; inset: 0; z-index: 1; background: radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0.38) 0%, rgba(0,0,0,0.12) 45%, rgba(0,0,0,0) 75%); pointer-events: none; }
 #loading.done { opacity: 0; pointer-events: none; }
-.loading-card { position: relative; text-align: center; width: min(52vw, 440px); }
+.ld-slides { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
+.ld-slide { position: absolute; inset: 0; background-position: center; background-size: cover; background-repeat: no-repeat; opacity: 0; transition: opacity 1s ease; }
+.ld-slide.on { opacity: 1; }
+.loading-card { position: relative; z-index: 2; text-align: center; width: min(52vw, 440px); }
 .loading-card p { color: rgba(255,255,255,0.88); margin-top: 14px; font-size: 13px; text-shadow: 0 1px 6px rgba(0,0,0,0.6); }
 .bar { height: 3px; background: rgba(255,255,255,0.28); border-radius: 3px; overflow: hidden; }
 #loading-bar { height: 100%; width: 0%; background: #fff; transition: width 0.25s ease; }

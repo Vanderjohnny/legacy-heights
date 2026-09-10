@@ -15,13 +15,13 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // internal modules carry a version query so browsers never pair a new main.js with a cached old module
-import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW, OPEN_PARCELS, IMAGE_KIND, LEISURE } from './config.js?v=22';
-import { api } from './api.js?v=22';
-import { createNight } from './night.js?v=22';
-import { createCars } from './cars.js?v=22';
-import { createRegionMap } from './region.js?v=22';
-import { createPois } from './poi.js?v=22';
-import { createPlanes } from './planes.js?v=22';
+import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW, OPEN_PARCELS, IMAGE_KIND, LEISURE } from './config.js?v=23';
+import { api } from './api.js?v=23';
+import { createNight } from './night.js?v=23';
+import { createCars } from './cars.js?v=23';
+import { createRegionMap } from './region.js?v=23';
+import { createPois } from './poi.js?v=23';
+import { createPlanes } from './planes.js?v=23';
 
 const THREE_VERSION = '0.170.0';
 const ASSET_V = '2026-09-10m';   // bump when models/textures change so browsers do not keep stale copies
@@ -1561,9 +1561,9 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', 
 const colourCss = (name) => { const c = state.data.colors[name] || [0.8, 0.8, 0.8]; return new THREE.Color().setRGB(c[0], c[1], c[2], THREE.LinearSRGBColorSpace).getStyle(); };
 const kindLabel = (kind) => (kind === 'duplex' ? t('duplexHouse') : t('singleHouse'));
 function galleryItems(h) {
-  const items = Object.entries(IMAGE_COLOR).map(([i, color]) => ({ index: +i, color, label: COLOR_LABEL[color] || color, kind: IMAGE_KIND[+i] }));
-  const rank = (it) => (it.color === h.color && it.kind === h.kind ? 0 : it.color === h.color ? 1 : it.kind === h.kind ? 2 : 3);
-  return items.sort((a, b) => rank(a) - rank(b) || a.index - b.index);
+  // only the renders of this body kind (single house or duplex), this house's colour first
+  const items = Object.entries(IMAGE_COLOR).map(([i, color]) => ({ index: +i, color, label: COLOR_LABEL[color] || color, kind: IMAGE_KIND[+i] })).filter((it) => it.kind === h.kind);
+  return items.sort((a, b) => (b.color === h.color) - (a.color === h.color) || a.index - b.index);
 }
 function renderGallery(h) {
   state.gallery = { items: galleryItems(h), index: 0, h };
