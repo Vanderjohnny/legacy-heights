@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%23101418%27/%3E%3Ctext x=%2732%27 y=%2742%27 font-family=%27Georgia,serif%27 font-size=%2728%27 text-anchor=%27middle%27 fill=%27%23fff%27%3ELH%3C/text%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="styles.css?v=13" />
-  <link rel="stylesheet" href="panel.css?v=9" />
+  <link rel="stylesheet" href="styles.css?v=14" />
+  <link rel="stylesheet" href="panel.css?v=10" />
   <script type="importmap">
     {
       "imports": {
@@ -45,7 +45,7 @@
     <div class="topbar-right">
       <div class="counter"><b id="count-houses">–</b> <span data-i18n="houses">houses</span> · <b id="count-lots">–</b> <span data-i18n="lots">lots</span></div>
       <button id="btn-overview" class="btn" data-i18n="resetView">Overview</button>
-      <button id="btn-top" class="btn" data-i18n="topView">Top view</button>
+      <button id="btn-leisure" class="btn" data-i18n="leisure">Leisure</button>
       <button id="btn-night" class="btn" data-i18n="night">Night</button>
       <button id="btn-map" class="btn" data-i18n="map">Region</button>
       <button id="btn-colortype" class="btn" data-i18n="colorByType">Colour by type</button>
@@ -79,8 +79,11 @@
     <button id="panel-close" class="icon-btn" aria-label="Close">×</button>
     <button id="panel-expand" class="icon-btn sheet-toggle" aria-label="Expand">⌃</button>
     <div class="panel-scroll">
-      <figure>
+      <figure id="panel-figure">
         <img id="panel-img" alt="" />
+        <button type="button" class="gal-nav prev" id="gal-prev" aria-label="Previous">&#8249;</button>
+        <button type="button" class="gal-nav next" id="gal-next" aria-label="Next">&#8250;</button>
+        <div class="gal-dots" id="gal-dots"></div>
         <figcaption id="panel-imgnote"></figcaption>
       </figure>
       <div class="panel-head">
@@ -111,7 +114,9 @@
 
   <div id="lightbox" hidden>
     <button class="icon-btn lb-close" aria-label="Close">×</button>
-    <img id="lightbox-img" alt="Floor plan" />
+    <button type="button" class="lb-nav lb-prev" aria-label="Previous" hidden>&#8249;</button>
+    <img id="lightbox-img" alt="" />
+    <button type="button" class="lb-nav lb-next" aria-label="Next" hidden>&#8250;</button>
     <p id="lightbox-caption"></p>
   </div>
 
@@ -138,6 +143,6 @@
 
   <div id="toast"></div>
 
-  <script type="module" src="src/main.js?v=21"></script>
+  <script type="module" src="src/main.js?v=22"></script>
 </body>
 </html>

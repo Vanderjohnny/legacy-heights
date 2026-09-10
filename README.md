@@ -52,6 +52,12 @@ Any other static server works for the read-only site (`python -m http.server 517
   phase is shown for the rest of the browser session. `OPEN_PARCELS` in `src/config.js` lists the open phases.
 - **House names**: the legend, tooltips and panel use the plan names (House Altura / Horizon / Pinnacle / Vista); the
   panel title reads "Lot A-21 · Pinnacle" and shows the phase, the plan, layout, areas and facade colour only.
+- **Panel gallery and colours**: the panel image is a gallery of the six reference renders (this house's colour
+  first, then the other colours of the same body, then the other body): arrows, dots, swipe, click to enlarge in
+  the lightbox. Six colour swatches below the facts recolour the 3D house at once (both sides of a duplex); the
+  chosen colour travels with the lead e-mail and the reservation (`colour` field, also kept in the Status sheet).
+- **Leisure**: the Leisure button opens a lightbox gallery of the leisure areas (`assets/img/leisure_N.jpg`,
+  captions in `LEISURE` in `src/config.js`); the Top view button was removed.
 - **Loading screen**: the aerial panorama of the site (`assets/img/loading.jpg`) with the logotype and a thin bar.
 - **Language**: the public site is English only (`state.lang = 'en'`, no toggle); the Portuguese strings remain in
   `src/config.js` for a future switch.

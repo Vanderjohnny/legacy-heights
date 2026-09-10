@@ -72,7 +72,7 @@ check('malformed property id is rejected', r.get('error') == 'bad-request', json
 
 # concurrency: 8 parallel reservations, exactly one succeeds
 def try_reserve(i):
-    try: return post({'action': 'reserve', 'pid': pid, 'code': CODE, 'password': args.reserve, 'by': f'racer-{i}'})
+    try: return post({'action': 'reserve', 'pid': pid, 'code': CODE, 'password': args.reserve, 'by': f'racer-{i}', 'colour': 'Pinkathon'})
     except Exception as e: return {'error': f'exception: {e}'}
 with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
     outs = list(ex.map(try_reserve, range(8)))
@@ -83,6 +83,8 @@ check('concurrent reserve: the others get not-available (or busy)', all(o.get('o
 st = get_statuses().get(pid, {})
 check('property is now reserved', st.get('status') == 'reserved', json.dumps(st))
 check('reserved record carries who / when', bool(st.get('updatedAt')) and bool(st.get('by')), json.dumps(st))
+if 'colour' in st: check('reserved record carries the facade colour', st.get('colour') == 'Pinkathon', json.dumps(st))
+else: print('SKIP colour column: this deployment predates it')
 
 r = post({'action': 'reserve', 'pid': pid, 'code': CODE, 'password': args.reserve, 'by': 'test'})
 check('reserving a reserved property fails with not-available', r.get('error') == 'not-available', json.dumps(r))

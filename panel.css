@@ -42,7 +42,7 @@ body.night .sbp-row:not(.head):nth-child(even), body.night .schip:hover, body.ni
 .section-head { display: flex; align-items: center; justify-content: space-between; margin: 8px 0 6px; }
 .section-head h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-2); font-weight: 600; }
 .btn.small { height: 30px; padding: 0 10px; font-size: 12px; box-shadow: none; }
-#panel-plan { width: 100%; height: auto; border-radius: 10px; background: #fff; border: 1px solid var(--line); cursor: zoom-in; display: block; }
+#panel-plan { width: 100%; height: auto; object-fit: contain; border-radius: 10px; background: #fff; border: 1px solid var(--line); cursor: zoom-in; display: block; }
 #panel-plan-name { font-size: 12px; margin-top: 6px; }
 .panel-actions { display: flex; gap: 8px; padding: 10px 18px 6px; border-top: 1px solid var(--line); flex: none; }
 .panel-actions .btn { height: 40px; padding: 0 12px; box-shadow: none; flex: 1; font-size: 13px; }
@@ -179,3 +179,24 @@ body.night .poi-facts div { background: rgba(255,255,255,0.08); }
 .pchip.locked { opacity: 0.55; }
 .pchip.locked::after { content: '🔒'; font-size: 9px; margin-left: 3px; }
 .pchip.locked:hover { opacity: 0.9; }
+/* panel gallery: arrows (always visible on touch screens), dots */
+.gal-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; border-radius: 50%; border: 0; background: rgba(16,20,24,0.55); color: #fff; font-size: 26px; line-height: 30px; padding: 0 0 3px; cursor: pointer; opacity: 0; transition: opacity 0.15s, background 0.15s; }
+.gal-nav.prev { left: 10px; } .gal-nav.next { right: 10px; }
+.gal-nav:hover { background: rgba(16,20,24,0.8); }
+#panel figure:hover .gal-nav, body.touch .gal-nav { opacity: 1; }
+.gal-dots { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 5px; }
+.gal-dots span { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,0.55); box-shadow: 0 0 0 1px rgba(0,0,0,0.25); }
+.gal-dots span.on { background: #fff; }
+/* facade colour choice */
+.swatches { display: inline-flex; gap: 6px; flex-wrap: wrap; vertical-align: middle; margin-right: 6px; }
+.swatch-btn { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.18); cursor: pointer; padding: 0; transition: transform 0.12s; }
+.swatch-btn:hover { transform: scale(1.12); }
+.swatch-btn.on { border-color: var(--ink); }
+.colour-fact .v { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; }
+.colour-fact .v em { flex-basis: 100%; }
+body.night .swatch-btn.on { border-color: #fff; }
+/* lightbox navigation */
+.lb-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 46px; height: 46px; border-radius: 50%; border: 0; background: rgba(255,255,255,0.16); color: #fff; font-size: 34px; line-height: 40px; padding: 0 0 4px; cursor: pointer; z-index: 2; }
+.lb-nav:hover { background: rgba(255,255,255,0.32); }
+.lb-prev { left: 18px; } .lb-next { right: 18px; }
+.lb-nav[hidden] { display: none; }

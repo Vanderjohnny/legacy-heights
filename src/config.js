@@ -36,6 +36,15 @@ export const IMAGES = {
 };
 export const IMAGE_COLOR = { 1: 'Caramel cloud', 2: 'isle dreamns', 3: 'Oak Tone', 4: 'Marzipan', 5: 'in the blue', 6: 'Pinkathon' };
 export const IMAGE_FALLBACK = { single: 3, duplex: 5 };
+export const IMAGE_KIND = { 1: 'single', 2: 'duplex', 3: 'single', 4: 'single', 5: 'duplex', 6: 'duplex' };
+
+// leisure areas (assets/img/leisure_N.jpg), opened by the Leisure button
+export const LEISURE = [
+  { file: 'leisure_1.jpg', label: { en: 'Outdoor gym', pt: 'Academia ao ar livre' } },
+  { file: 'leisure_2.jpg', label: { en: 'Sports hub: pickleball, football and basketball', pt: 'Núcleo esportivo: pickleball, futebol e basquete' } },
+  { file: 'leisure_3.jpg', label: { en: 'Racket sports courts', pt: 'Quadras de esportes de raquete' } },
+  { file: 'leisure_4.jpg', label: { en: 'Multi-sport court', pt: 'Quadra poliesportiva' } },
+];
 
 export function imageFor(kind, color) {
   const exact = IMAGES[kind]?.[color];
@@ -106,6 +115,7 @@ export const I18N = {
     source: 'Areas per drawings 25:04/02D and 25:04/A-01A (Richard Gill Associates Ltd.). Lot areas measured on the 3D model.',
     parcels: 'Phases',
     parcelsHint: 'Show or hide the houses of each phase',
+    leisure: 'Leisure', leisureTitle: 'Leisure areas', chooseColour: 'choose the facade colour · the 3D house updates', similarHouse: 'similar house', singleHouse: 'Single house', duplexHouse: 'Duplex', galleryHint: 'Click to enlarge · arrows for the other colours', colourWord: 'Facade colour',
     phase: 'Phase', underConstruction: 'under construction', unlockIntro: 'This phase is not released yet. Enter the access password to preview every phase of the development.', unlock: 'Unlock', checking: 'Checking…', unlocked: 'All phases unlocked.', lockedHint: 'Under construction · click to enter the password',
     propertyId: 'Property ID',
     status: 'Status',
@@ -209,6 +219,7 @@ export const I18N = {
     source: 'Áreas conforme desenhos 25:04/02D e 25:04/A-01A (Richard Gill Associates Ltd.). Áreas de lote medidas no modelo 3D.',
     parcels: 'Fases',
     parcelsHint: 'Mostre ou oculte as casas de cada fase',
+    leisure: 'Lazer', leisureTitle: 'Áreas de lazer', chooseColour: 'escolha a cor da fachada · a casa 3D atualiza', similarHouse: 'casa semelhante', singleHouse: 'Casa isolada', duplexHouse: 'Geminada', galleryHint: 'Clique para ampliar · setas para as outras cores', colourWord: 'Cor da fachada',
     phase: 'Fase', underConstruction: 'em construção', unlockIntro: 'Esta fase ainda não foi liberada. Digite a senha de acesso para ver todas as fases do empreendimento.', unlock: 'Liberar', checking: 'Verificando…', unlocked: 'Todas as fases liberadas.', lockedHint: 'Em construção · clique para digitar a senha',
     propertyId: 'ID do imóvel',
     status: 'Situação',

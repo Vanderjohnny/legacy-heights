@@ -15,13 +15,13 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // internal modules carry a version query so browsers never pair a new main.js with a cached old module
-import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW, OPEN_PARCELS } from './config.js?v=21';
-import { api } from './api.js?v=21';
-import { createNight } from './night.js?v=21';
-import { createCars } from './cars.js?v=21';
-import { createRegionMap } from './region.js?v=21';
-import { createPois } from './poi.js?v=21';
-import { createPlanes } from './planes.js?v=21';
+import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW, OPEN_PARCELS, IMAGE_KIND, LEISURE } from './config.js?v=22';
+import { api } from './api.js?v=22';
+import { createNight } from './night.js?v=22';
+import { createCars } from './cars.js?v=22';
+import { createRegionMap } from './region.js?v=22';
+import { createPois } from './poi.js?v=22';
+import { createPlanes } from './planes.js?v=22';
 
 const THREE_VERSION = '0.170.0';
 const ASSET_V = '2026-09-10m';   // bump when models/textures change so browsers do not keep stale copies
@@ -58,6 +58,8 @@ const state = {
   activeTypes: new Set([1, 2, 3, 4]),
   activeParcels: new Set(PHASES_UNLOCKED ? PARCELS : OPEN_PARCELS),
   unlocked: PHASES_UNLOCKED,   // the phases under construction need the access password (checked server-side)
+  gallery: { items: [], index: 0, h: null },
+  chosenColour: {},     // house id -> Blender colour name chosen in the panel (travels with the lead / reservation)
   activeStatuses: new Set(['available', 'reserved', 'sold']),
   byPhase: false,
   colorByType: false,
@@ -75,6 +77,7 @@ const fmt = (n, d = 0) => (n == null || Number.isNaN(n)) ? '–' : n.toLocaleStr
 // ---------------------------------------------------------------------------
 const canvas = document.getElementById('scene');
 const IS_TOUCH = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+document.body.classList.toggle('touch', IS_TOUCH);
 const IS_PHONE = () => window.innerWidth <= 640;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, IS_TOUCH ? 1.5 : 2));
@@ -298,6 +301,7 @@ async function init() {
   night.build();
   cars = createCars({ scene, loadGLB, pavedClass, pavedGrid: paved, debug: /carsdebug/.test(location.search), paintGeometries: groundMeshes.filter((o) => (Array.isArray(o.material) ? o.material[0] : o.material) === MATS.paint).map((o) => o.geometry), isTouch: IS_TOUCH });
   state.carReport = await cars.build();
+  applyStatusColours();
   const runway = runwayCentreline(state.airport);
   if (runway) planes = createPlanes({ scene, runway, isTouch: IS_TOUCH, groundY: -0.5 });
   applyShading();
@@ -320,6 +324,7 @@ async function refreshStatuses() {
   try {
     const doc = await api.statuses();
     state.status = doc.statuses || {};
+    applyStatusColours();
     buildStatusLines();
     buildLegend();
     if (state.selected) renderPanel(state.selected);
@@ -1325,7 +1330,8 @@ const $ = (id) => document.getElementById(id);
 function setupUI() {
   applyI18n();
   $('btn-overview').onclick = () => { clearSelection(); setOverview(false); };
-  $('btn-top').onclick = () => setTopView();
+  if ($('btn-top')) $('btn-top').onclick = () => setTopView();
+  $('btn-leisure').onclick = openLeisure;
   $('btn-colortype').onclick = () => { state.colorByType = !state.colorByType; $('btn-colortype').classList.toggle('active', state.colorByType); refreshFacadeColors(); };
   $('btn-ao').classList.toggle('active', state.ao);
   $('btn-ao').onclick = () => { state.ao = !state.ao; $('btn-ao').classList.toggle('active', state.ao); };
@@ -1355,9 +1361,17 @@ function setupUI() {
   });
   // property panel v2: lightbox, sheet toggle, sales actions
   $('panel-expand').onclick = () => $('panel').classList.toggle('expanded');
-  const openLightbox = () => { if (!state.selected) return; $('lightbox-img').src = $('panel-plan').src; $('lightbox-caption').textContent = $('panel-plan-name').textContent; $('lightbox').hidden = false; };
-  $('plan-expand').onclick = openLightbox;
-  $('panel-plan').onclick = openLightbox;
+  const planItems = () => (state.selected && $('panel-plan').getAttribute('src') ? [{ src: $('panel-plan').src, caption: $('panel-plan-name').textContent }] : []);
+  $('plan-expand').onclick = () => openLightbox(planItems(), 0);
+  $('panel-plan').onclick = () => openLightbox(planItems(), 0);
+  let swipeX = null, swiped = false;
+  $('panel-img').onclick = () => { if (swiped) { swiped = false; return; } const g = state.gallery; if (!g.items.length) return; openLightbox(g.items.map((it) => ({ src: imageUrl(`assets/img/house_${it.index}.jpg`), caption: `${it.label} · ${kindLabel(it.kind)}` })), g.index); };
+  $('gal-prev').onclick = (ev) => { ev.stopPropagation(); stepGallery(-1); };
+  $('gal-next').onclick = (ev) => { ev.stopPropagation(); stepGallery(1); };
+  $('panel-figure').addEventListener('pointerdown', (ev) => { swipeX = ev.clientX; });
+  $('panel-figure').addEventListener('pointerup', (ev) => { if (swipeX == null) return; const dx = ev.clientX - swipeX; swipeX = null; if (Math.abs(dx) > 40) { swiped = true; stepGallery(dx < 0 ? 1 : -1); } });
+  document.querySelector('.lb-prev').onclick = (ev) => { ev.stopPropagation(); stepLightbox(-1); };
+  document.querySelector('.lb-next').onclick = (ev) => { ev.stopPropagation(); stepLightbox(1); };
   $('lightbox').onclick = (ev) => { if (ev.target.id === 'lightbox' || ev.target.classList.contains('lb-close')) $('lightbox').hidden = true; };
   $('modal').onclick = (ev) => { if (ev.target.id === 'modal' || ev.target.classList.contains('modal-close')) closeModal(); };
   $('btn-interest').onclick = () => state.selected && openLeadForm(state.selected);
@@ -1376,6 +1390,7 @@ function setupUI() {
       if (pois && pois.selected) { pois.select(null); return; }
       clearSelection(); results.classList.remove('show');
     }
+    if (!$('lightbox').hidden) { if (ev.key === 'ArrowRight') stepLightbox(1); if (ev.key === 'ArrowLeft') stepLightbox(-1); return; }
     if (ev.target === search) return;
     if (ev.key === 'ArrowRight' && state.selected) step(1);
     if (ev.key === 'ArrowLeft' && state.selected) step(-1);
@@ -1465,18 +1480,12 @@ function applyI18n() {
 }
 function renderPanel(h) {
   const ty = TYPES[h.type];
-  const img = imageFor(h.kind, h.color);
-  const imgColor = COLOR_LABEL[IMAGE_COLOR[img.index]] || IMAGE_COLOR[img.index];
-  const c = state.data.colors[h.color] || [0.8, 0.8, 0.8];
-  const swatch = new THREE.Color().setRGB(c[0], c[1], c[2], THREE.LinearSRGBColorSpace).getStyle();
   const gfa = ty.gfaSqft, roof = ty.roofSqft;
   const per = ty.units > 1 ? ` <small>(${t('perUnit')})</small>` : '';
   const st = statusOf(h), sinfo = state.status[h.pid] || {};
   const prop = h.prop || {};
   const twin = h.house && h.house.units.length > 1 ? h.house.units.find((u) => u !== h) : null;
-  $('panel-img').src = imageUrl(`assets/img/house_${img.index}.jpg`);
-  $('panel-img').alt = `${ty.label[state.lang]} — ${imgColor}`;
-  $('panel-imgnote').textContent = img.exact ? t('imgExact') : `${t('imgNote')} ${imgColor}`;
+  renderGallery(h);
   $('panel-title').textContent = `${t('lot')} ${h.code}${prop.planName ? ` · ${prop.planName}` : ''}`;
   const badge = $('panel-status'); badge.className = `status-badge ${st}`; badge.textContent = STATUS[st].label[state.lang];
   $('panel-sub').innerHTML = `${t('phase')} ${h.parcel}${prop.parcelInferred ? ` <span class="inferred-note">(${t('inferred')})</span>` : ''}${sinfo.updatedAt ? ` · ${t('lastUpdate')} ${new Date(sinfo.updatedAt).toLocaleDateString(state.lang === 'pt' ? 'pt-BR' : 'en-GB')}` : ''}`;
@@ -1487,10 +1496,11 @@ function renderPanel(h) {
       <div class="fact"><span class="k">${t('gfa')}${per}</span><span class="v">${fmt(gfa)} ${t('sqft')} <em>${fmt(gfa / SQFT_PER_M2, 1)} ${t('sqm')}</em></span></div>
       <div class="fact"><span class="k">${t('roof')}${per}</span><span class="v">${fmt(roof)} ${t('sqft')} <em>${fmt(roof / SQFT_PER_M2, 1)} ${t('sqm')}</em></span></div>
       <div class="fact"><span class="k">${t('lotArea')}${h.lots.length > 1 ? ` <small>(${h.lots.length} ${t('lots')})</small>` : ''}</span><span class="v">${fmt(h.lotArea == null ? null : h.lotArea * SQFT_PER_M2)} ${t('sqft')} <em>${fmt(h.lotArea, 1)} ${t('sqm')}</em></span></div>
-      <div class="fact"><span class="k">${t('facade')}</span><span class="v"><span class="swatch" style="background:${swatch}"></span>${COLOR_LABEL[h.color] || h.color}</span></div>
+      <div class="fact wide colour-fact"><span class="k">${t('facade')}</span><span class="v"><span class="swatches" id="swatches">${Object.keys(COLOR_LABEL).map((name) => `<button type="button" class="swatch-btn ${name === h.color ? 'on' : ''}" data-color="${name}" title="${COLOR_LABEL[name]}" style="background:${colourCss(name)}"></button>`).join('')}</span> <b id="swatch-name">${COLOR_LABEL[h.color] || h.color}</b><em>${t('chooseColour')}</em></span></div>
       ${twin ? `<div class="fact wide"><span class="k">${t('twin')}</span><span class="v"><a href="#" id="panel-twin">${t('lot')} ${twin.code}</a> <em><span class="dot" style="background:${STATUS[statusOf(twin)].hex}"></span>${STATUS[statusOf(twin)].label[state.lang]} · ${t('unit')} ${h.index === 0 ? 'A' : 'B'}</em></span></div>` : ''}
     </div>`;
   if (twin) $('panel-twin').onclick = (ev) => { ev.preventDefault(); select(twin, false); };
+  $('panel-body').querySelectorAll('.swatch-btn').forEach((b) => { b.onclick = () => setHouseColour(h, b.dataset.color); });
   const plan = prop.plan || state.registry?.plans?.[h.type]?.file;
   $('panel-plan').src = plan ? imageUrl(`assets/plans/${plan}`) : '';
   $('panel-plan-name').textContent = plan ? `${prop.planName || ''} · ${ty.beds} ${t('beds')} · ${ty.baths} ${t('baths')}${ty.units > 1 ? ` · ${t('perUnit')}` : ''}` : '';
@@ -1545,15 +1555,81 @@ function openUnlock(parcel, pending = null) {
 function openModal(html) { $('modal-content').innerHTML = html; $('modal').hidden = false; const f = $('modal').querySelector('input, textarea'); if (f) setTimeout(() => f.focus(), 50); }
 function closeModal() { $('modal').hidden = true; $('modal-content').innerHTML = ''; }
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+// ---------------------------------------------------------------------------
+// Panel gallery (the six reference renders, this house's colour first), facade colour choice, lightbox, leisure
+// ---------------------------------------------------------------------------
+const colourCss = (name) => { const c = state.data.colors[name] || [0.8, 0.8, 0.8]; return new THREE.Color().setRGB(c[0], c[1], c[2], THREE.LinearSRGBColorSpace).getStyle(); };
+const kindLabel = (kind) => (kind === 'duplex' ? t('duplexHouse') : t('singleHouse'));
+function galleryItems(h) {
+  const items = Object.entries(IMAGE_COLOR).map(([i, color]) => ({ index: +i, color, label: COLOR_LABEL[color] || color, kind: IMAGE_KIND[+i] }));
+  const rank = (it) => (it.color === h.color && it.kind === h.kind ? 0 : it.color === h.color ? 1 : it.kind === h.kind ? 2 : 3);
+  return items.sort((a, b) => rank(a) - rank(b) || a.index - b.index);
+}
+function renderGallery(h) {
+  state.gallery = { items: galleryItems(h), index: 0, h };
+  showGalleryItem();
+}
+function showGalleryItem() {
+  const { items, index, h } = state.gallery; const it = items[index]; if (!it) return;
+  $('panel-img').src = imageUrl(`assets/img/house_${it.index}.jpg`);
+  $('panel-img').alt = `${it.label} · ${kindLabel(it.kind)}`;
+  $('panel-imgnote').textContent = it.kind === h.kind ? `${it.label} · ${kindLabel(it.kind)}` : `${it.label} · ${t('similarHouse')} (${kindLabel(it.kind).toLowerCase()})`;
+  $('gal-dots').innerHTML = items.map((x, i) => `<span class="${i === index ? 'on' : ''}"></span>`).join('');
+  $('panel-figure').title = t('galleryHint');
+}
+function stepGallery(d) { const g = state.gallery; if (!g.items.length) return; g.index = (g.index + d + g.items.length) % g.items.length; showGalleryItem(); }
+// the colour chosen in the panel recolours the 3D house at once (both sides of a duplex) and travels with the lead / reservation
+function setHouseColour(h, name, silent = false) {
+  if (!state.data.colors[name]) return;
+  const house = h.house || h;
+  house.color = name; for (const u of house.units || []) u.color = name;
+  state.chosenColour[house.id] = name;
+  refreshFacadeColors();
+  if (silent || state.selected !== h) return;
+  $('panel-body').querySelectorAll('.swatch-btn').forEach((b) => b.classList.toggle('on', b.dataset.color === name));
+  const sn = $('swatch-name'); if (sn) sn.textContent = COLOR_LABEL[name] || name;
+  const g = state.gallery; const i = g.items.findIndex((x) => x.color === name && x.kind === h.kind); const j = i >= 0 ? i : g.items.findIndex((x) => x.color === name);
+  if (j >= 0) { g.index = j; showGalleryItem(); }
+}
+// reserved / sold houses keep the colour chosen at reservation time (stored by the backend with the status)
+function applyStatusColours() {
+  const byLabel = Object.fromEntries(Object.entries(COLOR_LABEL).map(([k, v]) => [v.toLowerCase(), k]));
+  let changed = false;
+  for (const [pid, s] of Object.entries(state.status)) {
+    if (!s || !s.colour) continue;
+    const u = state.unitByPid.get(pid); const name = byLabel[String(s.colour).toLowerCase()] || (state.data.colors[s.colour] ? s.colour : null);
+    if (!u || !name) continue;
+    const house = u.house || u; if (house.color === name) continue;
+    house.color = name; for (const x of house.units || []) x.color = name; changed = true;
+  }
+  if (changed) refreshFacadeColors();
+}
+// lightbox with navigation: items = [{ src, caption }]
+let lb = { items: [], index: 0 };
+function openLightbox(items, index = 0) {
+  if (!items.length) return;
+  lb = { items, index };
+  showLightbox();
+  $('lightbox').hidden = false;
+}
+function showLightbox() {
+  const it = lb.items[lb.index]; if (!it) return;
+  $('lightbox-img').src = it.src; $('lightbox-img').alt = it.caption || '';
+  $('lightbox-caption').textContent = lb.items.length > 1 ? `${it.caption} · ${lb.index + 1} / ${lb.items.length}` : it.caption;
+  document.querySelectorAll('.lb-nav').forEach((b) => { b.hidden = lb.items.length < 2; });
+}
+function stepLightbox(d) { if (lb.items.length < 2) return; lb.index = (lb.index + d + lb.items.length) % lb.items.length; showLightbox(); }
+function openLeisure() { openLightbox(LEISURE.map((l) => ({ src: imageUrl(`assets/img/${l.file}`), caption: `${t('leisureTitle')} · ${l.label[state.lang] || l.label.en}` })), 0); }
+
 function leadContext(h) {
-  return { pid: h.pid, code: h.code, house: h.id, model: h.prop?.planName || `Casa ${h.model}`, type: TYPES[h.type].label.en, parcel: h.parcel, page: location.href, lang: state.lang, timestamp: new Date().toISOString() };
+  return { pid: h.pid, code: h.code, house: h.id, model: h.prop?.planName || `Casa ${h.model}`, type: TYPES[h.type].label.en, parcel: h.parcel, colour: COLOR_LABEL[(h.house || h).color] || (h.house || h).color || '', page: location.href, lang: state.lang, timestamp: new Date().toISOString() };
 }
 function openLeadForm(h) {
   const ctx = leadContext(h);
   openModal(`
     <h2>${t('leadTitle')}</h2>
     <p class="intro">${t('leadIntro')}</p>
-    <div class="ref"><b>${t('lot')} ${esc(h.code)}</b> · ${esc(ctx.model)} · ${t('parcel')} ${esc(h.parcel)} · <code>${esc(h.pid)}</code></div>
+    <div class="ref"><b>${t('lot')} ${esc(h.code)}</b> · ${esc(ctx.model)} · ${t('phase')} ${esc(h.parcel)} · ${t('colourWord')}: <b>${esc(ctx.colour)}</b></div>
     <form id="lead-form">
       <div class="field"><label for="lead-name">${t('name')}</label><input id="lead-name" name="name" required autocomplete="name" /></div>
       <div class="field"><label for="lead-email">${t('email')}</label><input id="lead-email" name="email" type="email" required autocomplete="email" /></div>
@@ -1567,12 +1643,12 @@ function openLeadForm(h) {
   $('lead-form').onsubmit = async (ev) => {
     ev.preventDefault();
     const fd = new FormData(ev.target);
-    const lead = { ...ctx, name: fd.get('name'), email: fd.get('email'), phone: fd.get('phone'), message: fd.get('message'), website: fd.get('website') };
+    const lead = { ...ctx, name: fd.get('name'), email: fd.get('email'), phone: fd.get('phone'), message: `${t('colourWord')}: ${ctx.colour}\n${fd.get('message') || ''}`.trim(), website: fd.get('website') };
     const out = $('lead-msg-out'); const btn = $('lead-send');
     if (!api.hasBackend()) {
       // no server yet: hand the lead to the visitor's e-mail client with everything pre-filled
       const subject = `Legacy Heights - ${t('lot')} ${h.code} - ${lead.name}`;
-      const body = `${t('interested')}: ${t('lot')} ${h.code} (${ctx.model}, ${t('parcel')} ${h.parcel})\nID: ${h.pid}\n\n${t('name')}: ${lead.name}\n${t('email')}: ${lead.email}\n${t('phone')}: ${lead.phone || '-'}\n\n${lead.message || ''}\n\n${ctx.page}`;
+      const body = `${t('interested')}: ${t('lot')} ${h.code} (${ctx.model}, ${t('parcel')} ${h.parcel})\nID: ${h.pid}\n${t('colourWord')}: ${ctx.colour}\n\n${t('name')}: ${lead.name}\n${t('email')}: ${lead.email}\n${t('phone')}: ${lead.phone || '-'}\n\n${lead.message || ''}\n\n${ctx.page}`;
       window.location.href = `mailto:${BACKEND.salesEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
       out.className = 'form-msg ok'; out.textContent = t('leadSent');
       setTimeout(closeModal, 1800);
@@ -1595,7 +1671,7 @@ function openStatusChange(h, action) {
   openModal(`
     <h2>${title}</h2>
     <p class="intro">${t('authIntro')}</p>
-    <div class="ref"><b>${t('lot')} ${esc(h.code)}</b> · ${esc(h.prop?.planName || '')} · <code>${esc(h.pid)}</code></div>
+    <div class="ref"><b>${t('lot')} ${esc(h.code)}</b> · ${esc(h.prop?.planName || '')}${action === 'reserve' ? ` · ${t('colourWord')}: <b>${esc(COLOR_LABEL[(h.house || h).color] || '')}</b>` : ''} · <code>${esc(h.pid)}</code></div>
     <form id="auth-form">
       <div class="field"><label for="auth-by">${t('name')}</label><input id="auth-by" name="by" autocomplete="name" /></div>
       <div class="field"><label for="auth-pw">${t('password')}</label><input id="auth-pw" name="password" type="password" required autocomplete="current-password" /></div>
@@ -1609,7 +1685,9 @@ function openStatusChange(h, action) {
     btn.disabled = true; btn.textContent = t('sending'); out.className = 'form-msg'; out.textContent = '';
     try {
       const fn = action === 'reserve' ? api.reserve : action === 'sold' ? api.markSold : api.release;
-      const res = await fn(h.pid, h.code, fd.get('password'), fd.get('by'));
+      const colour = action === 'reserve' ? (COLOR_LABEL[(h.house || h).color] || '') : '';
+      const who = colour && fd.get('by') ? `${fd.get('by')} · ${colour}` : (colour || fd.get('by'));   // colour also in "by" until the deployed script stores its own column
+      const res = await fn(h.pid, h.code, fd.get('password'), who, colour);
       if (res.statuses) state.status = res.statuses; else if (res.status) state.status[h.pid] = res.status;
       buildStatusLines(); buildLegend(); renderPanel(h);
       toast(action === 'reserve' ? t('reserveOk') : action === 'sold' ? t('soldOk') : t('releaseOk'));

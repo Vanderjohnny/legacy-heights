@@ -66,7 +66,9 @@ class Backend:
                 if current == 'available': return {'error': 'not-available', 'current': current}
                 nxt = 'available'
             now = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+            colour = str(body.get('colour', '')).strip()[:40] or self.statuses.get(pid, {}).get('colour', '')
             rec = {'status': nxt, 'updatedAt': now, 'by': by or role}
+            if colour: rec['colour'] = colour
             self.statuses[pid] = rec
             self.log.append((time.time(), pid, action, f'{current} -> {nxt}', by or role))
             print(f'[api] {action} {body.get("code", "")} {pid} {current} -> {nxt} by {by or role}', flush=True)

@@ -13,7 +13,7 @@
  * RESERVE_PASSWORD, SALES_EMAIL (optionally ADMIN_PASSWORD for a separate sold/release password, NOTIFY_EMAILS, SITE_URL), then deploy as a web app
  * ("Execute as: me", "Who has access: anyone") and paste the /exec URL into src/config.js (BACKEND.url).
  */
-const VERSION = '2026-09-09';
+const VERSION = '2026-09-10b';
 const SHEET_STATUS = 'Status', SHEET_LOG = 'Log', SHEET_LEADS = 'Leads';
 const STATUSES = ['available', 'reserved', 'sold'];
 const PID_RE = /^LH_[0-9a-f]{32}(-[12])?$/;   // -1 / -2 = the two sides of a semi-detached house
@@ -56,6 +56,7 @@ function handleStatusChange_(action, body) {
   var pid = String(body.pid || '').trim();
   if (!PID_RE.test(pid)) return { error: 'bad-request' };
   var by = String(body.by || '').trim().slice(0, 80);
+  var colour = String(body.colour || '').trim().slice(0, 40);   // facade colour chosen on the site
   var password = String(body.password || '');
   var cache = CacheService.getScriptCache();
   var failKey = 'failed-logins';
@@ -86,14 +87,16 @@ function handleStatusChange_(action, body) {
 
     var now = new Date();
     var code = String(body.code || (rowIndex > 0 ? rows[rowIndex - 1][1] : '')).slice(0, 40);
-    var record = [pid, code, next, now.toISOString(), by || role, action];
+    var prevColour = rowIndex > 0 ? String(rows[rowIndex - 1][6] || '') : '';
+    if (colour) prevColour = colour;
+    var record = [pid, code, next, now.toISOString(), by || role, action, prevColour];
     if (rowIndex > 0) sheet.getRange(rowIndex, 1, 1, record.length).setValues([record]);
     else sheet.appendRow(record);
     SpreadsheetApp.flush();
-    appendLog_(pid, code, action, current + ' -> ' + next, by || role, '');
+    appendLog_(pid, code, action, current + ' -> ' + next, by || role, prevColour);
     cache.remove('statuses');
-    notify_('Legacy Heights: ' + code + ' ' + next.toUpperCase(), 'Property ' + code + ' (' + pid + ') changed from ' + current + ' to ' + next + ' by ' + (by || role) + ' at ' + now.toISOString() + '.');
-    return { ok: true, status: { status: next, updatedAt: now.toISOString(), by: by || role }, statuses: readStatuses_(false) };
+    notify_('Legacy Heights: ' + code + ' ' + next.toUpperCase(), 'Property ' + code + ' (' + pid + ') changed from ' + current + ' to ' + next + ' by ' + (by || role) + ' at ' + now.toISOString() + '.' + (prevColour ? ' Facade colour: ' + prevColour + '.' : ''));
+    return { ok: true, status: { status: next, updatedAt: now.toISOString(), by: by || role, colour: prevColour }, statuses: readStatuses_(false) };
   } finally {
     lock.releaseLock();
   }
@@ -144,6 +147,7 @@ function readStatuses_(useCache) {
       var st = normalize_(rows[i][2]);
       if (st === 'available') continue;   // the site treats missing entries as available: keeps the payload small
       out[pid] = { status: st, updatedAt: rows[i][3] instanceof Date ? rows[i][3].toISOString() : String(rows[i][3] || ''), by: String(rows[i][4] || '') };
+      if (rows[i][6]) out[pid].colour = String(rows[i][6]);
     }
   }
   try { cache.put('statuses', JSON.stringify(out), 20); } catch (err) { /* payload too large for the cache: fine */ }
@@ -158,6 +162,7 @@ function handleInterest_(lead) {
   var email = String(lead.email || '').trim().slice(0, 160);
   var phone = String(lead.phone || '').trim().slice(0, 60);
   var message = String(lead.message || '').trim().slice(0, 2000);
+  var colour = String(lead.colour || '').trim().slice(0, 40);
   var pid = String(lead.pid || '').trim(), code = String(lead.code || '').trim().slice(0, 40);
   if (String(lead.website || '')) return { ok: true };                       // honeypot field filled by a bot: pretend success
   if (name.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return { error: 'invalid-lead' };
@@ -170,12 +175,12 @@ function handleInterest_(lead) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(SHEET_LEADS) || setup_().leadsSheet;
   var now = new Date();
-  sheet.appendRow([now.toISOString(), code, pid, String(lead.model || ''), String(lead.parcel || ''), name, email, phone, message, String(lead.lang || ''), String(lead.page || '')]);
+  sheet.appendRow([now.toISOString(), code, pid, String(lead.model || ''), String(lead.parcel || ''), name, email, phone, message, String(lead.lang || ''), String(lead.page || ''), colour]);
   var p = PropertiesService.getScriptProperties();
   var to = p.getProperty('SALES_EMAIL');
   if (to) {
     var subject = 'Legacy Heights lead: Lot ' + code + ' - ' + name;
-    var text = ['New interest registered on the Legacy Heights website', '', 'Property: Lot ' + code + ' (' + String(lead.model || '') + ', parcel ' + String(lead.parcel || '') + ')', 'Property ID: ' + pid, '', 'Name: ' + name, 'E-mail: ' + email, 'Phone: ' + (phone || '-'), '', 'Message:', message || '-', '', 'Page: ' + String(lead.page || ''), 'Received: ' + now.toISOString()].join('\n');
+    var text = ['New interest registered on the Legacy Heights website', '', 'Property: Lot ' + code + ' (' + String(lead.model || '') + ', parcel ' + String(lead.parcel || '') + ')', 'Property ID: ' + pid, 'Facade colour: ' + (colour || '-'), '', 'Name: ' + name, 'E-mail: ' + email, 'Phone: ' + (phone || '-'), '', 'Message:', message || '-', '', 'Page: ' + String(lead.page || ''), 'Received: ' + now.toISOString()].join('\n');
     try { MailApp.sendEmail({ to: to, subject: subject, body: text, replyTo: email, name: 'Legacy Heights website' }); }
     catch (err) { console.error('lead e-mail failed', err); return { ok: true, emailed: false }; }
   }
@@ -214,9 +219,9 @@ function setup_() {
     return s;
   };
   return {
-    statusSheet: ensure(SHEET_STATUS, ['property_id', 'lot', 'status', 'updated_at', 'by', 'last_action']),
+    statusSheet: ensure(SHEET_STATUS, ['property_id', 'lot', 'status', 'updated_at', 'by', 'last_action', 'colour']),
     logSheet: ensure(SHEET_LOG, ['time', 'property_id', 'lot', 'action', 'result', 'by', 'note']),
-    leadsSheet: ensure(SHEET_LEADS, ['time', 'lot', 'property_id', 'model', 'parcel', 'name', 'email', 'phone', 'message', 'lang', 'page']),
+    leadsSheet: ensure(SHEET_LEADS, ['time', 'lot', 'property_id', 'model', 'parcel', 'name', 'email', 'phone', 'message', 'lang', 'page', 'colour']),
   };
 }
 

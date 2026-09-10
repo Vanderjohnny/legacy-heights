@@ -40,6 +40,9 @@ After changing `Code.gs` later: **Deploy → Manage deployments → edit → ver
   Two people reserving the same property at the same time: the script lock serialises the requests, the second one
   gets `not-available` and the site refreshes its statuses.
 * `sold` needs the admin password (from AVAILABLE or RESERVED). `release` (admin) puts a property back to AVAILABLE.
+* `reserve` / `sold` / `release` accept a `colour` (facade colour chosen on the site): stored in the Status
+  sheet (column `colour`, kept on later changes), in the Log note, in the notification e-mail and returned in
+  `statuses` so every visitor sees the reserved house in that colour. Leads carry it too (`Facade colour` line).
 * `unlock` checks a password and answers `ok`: the site shows only phase A until it is accepted (the other phases
   are "under construction"). Deployments without this action are probed with a `release` on an impossible property id.
 * `interest` stores the lead in the `Leads` sheet and e-mails `SALES_EMAIL` (reply-to = the visitor). It never
