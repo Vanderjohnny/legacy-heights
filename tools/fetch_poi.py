@@ -103,6 +103,42 @@ for p in pois:
     p["x"], p["y"] = round(E - dE, 1), round(N - dN, 1)   # Blender frame (metres)
     p.pop("tags", None) if not p.get("tags") else None
 
+# driving route geometry (OSRM), simplified, in the Blender frame: drawn as a line along the streets in the site
+def simplify(pts, tol):
+    if len(pts) < 3: return pts
+    ax, ay = pts[0]; bx, by = pts[-1]
+    dx, dy = bx - ax, by - ay; L2 = dx * dx + dy * dy
+    best, bi = -1.0, 0
+    for i in range(1, len(pts) - 1):
+        px, py = pts[i]
+        if L2 == 0: d = math.hypot(px - ax, py - ay)
+        else:
+            t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / L2))
+            d = math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+        if d > best: best, bi = d, i
+    if best <= tol: return [pts[0], pts[-1]]
+    return simplify(pts[:bi + 1], tol)[:-1] + simplify(pts[bi:], tol)
+
+def osrm_route(poi):
+    url = f"https://router.project-osrm.org/route/v1/driving/{LNG},{LAT};{poi['lng']},{poi['lat']}?overview=full&geometries=geojson"
+    r = requests.get(url, timeout=60, headers={"User-Agent": "legacy-heights-site/1.0"})
+    r.raise_for_status(); j = r.json()
+    coords = j["routes"][0]["geometry"]["coordinates"]
+    pts = []
+    for lng, lat in coords:
+        E, N = TO_GRID.transform(lng, lat)
+        pts.append((E - dE, N - dN))
+    pts = simplify(pts, 6.0)
+    return [[round(x, 1), round(y, 1)] for x, y in pts]
+
+for p in pois:
+    if p.get("route") and not ROUTE_ONLY: continue
+    try:
+        p["route"] = osrm_route(p); time.sleep(0.4)
+    except Exception as e:
+        print("  route failed for", p["name"], e, file=sys.stderr); p.pop("route", None)
+print("routes:", sum(1 for p in pois if p.get("route")), "of", len(pois))
+
 pois.sort(key=lambda p: (list(CATS).index(p["cat"]), p["drive_min"]))
 doc = {"generated": time.strftime("%Y-%m-%d"), "site": {"lat": LAT, "lng": LNG, "name": "Legacy Heights"},
        "attribution": "POI data © OpenStreetMap contributors (ODbL); routing: OSRM demo server",

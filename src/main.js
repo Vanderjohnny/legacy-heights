@@ -15,14 +15,15 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // internal modules carry a version query so browsers never pair a new main.js with a cached old module
-import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND } from './config.js?v=6';
-import { api } from './api.js?v=6';
-import { createNight } from './night.js?v=6';
-import { createCars } from './cars.js?v=6';
-import { createRegionMap } from './region.js?v=6';
+import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS } from './config.js?v=7';
+import { api } from './api.js?v=7';
+import { createNight } from './night.js?v=7';
+import { createCars } from './cars.js?v=7';
+import { createRegionMap } from './region.js?v=7';
+import { createPois } from './poi.js?v=7';
 
 const THREE_VERSION = '0.170.0';
-const ASSET_V = '2026-09-09a';   // bump when models/textures change so browsers do not keep stale copies
+const ASSET_V = '2026-09-10a';   // bump when models/textures change so browsers do not keep stale copies
 const asset = (url) => `${url}${url.includes('?') ? '&' : '?'}v=${ASSET_V}`;
 // Single-file build (tools/build_single_html.py): every asset is embedded as base64 in window.LH_EMBED and nothing is fetched.
 const EMBED = window.LH_EMBED || null;
@@ -88,7 +89,7 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.screenSpacePanning = false;
 controls.minDistance = 12;
-controls.maxDistance = 3200;
+controls.maxDistance = 26000;   // far enough to frame a driving route to the beaches / the airport
 controls.maxPolarAngle = THREE.MathUtils.degToRad(84);
 controls.zoomToCursor = true;
 
@@ -246,18 +247,20 @@ const houseGroups = [];      // InstancedMesh list (visible geometry)
 const proxies = [];          // invisible instanced boxes for picking (one per model)
 const modelInfo = {};        // model index -> { center: Vector3 (local three), size }
 let lotLines, hoverLine, selectLine, selectFill;
-let night = null, cars = null, regionMap = null;   // night mode / streetlights, moving cars, regional map
+let night = null, cars = null, regionMap = null, pois = null;   // night mode / streetlights, moving cars, regional map
 
 async function init() {
-  const [data, registry, statusDoc] = await Promise.all([
+  const [data, registry, statusDoc, poiDoc] = await Promise.all([
     loadJson('data/site.json'),
     loadJson('data/properties.json').catch(() => ({ properties: {} })),
     api.statuses().catch(() => ({ statuses: {} })),
+    loadJson('data/poi.json').catch(() => ({ pois: [], categories: {} })),
   ]);
   state.data = data;
   state.props = registry.properties || {};
   state.registry = registry;
   state.status = statusDoc.statuses || {};
+  state.poiDoc = poiDoc;
   prepareData(data);
   buildLots(data);
 
@@ -282,7 +285,7 @@ async function init() {
     }
   } else houseGltfs.forEach((g, idx) => setupHouseModel(idx + 1, g.scene, data.models[idx + 1]));
   await buildTrees(data);
-  night = createNight({ scene, renderer, controls, getCsm: () => csm, hemi, treeGroup, worldGround, satMeshes, HORIZON, pmrem, isTouch: IS_TOUCH, lots: state.lots, lotByHouse: state.lotByHouse, pavedClass, models, rebuildInstances, sunDir: SUN_DIR });
+  night = createNight({ scene, renderer, camera, controls, getCsm: () => csm, hemi, treeGroup, worldGround, satMeshes, HORIZON, pmrem, isTouch: IS_TOUCH, lots: state.lots, lotByHouse: state.lotByHouse, pavedClass, models, rebuildInstances, sunDir: SUN_DIR, onTime });
   night.build();
   cars = createCars({ scene, paintGeometries: groundMeshes.filter((o) => (Array.isArray(o.material) ? o.material[0] : o.material) === MATS.paint).map((o) => o.geometry), isTouch: IS_TOUCH });
   state.carReport = cars.build();
@@ -294,7 +297,8 @@ async function init() {
   buildStatusLines();
   setOverview(true);
   // compile the night-only shaders now (asynchronously) so the first Day/Night toggle does not stall
-  try { night.apply(true); await renderer.compileAsync(scene, camera); night.apply(false); await renderer.compileAsync(scene, camera); } catch (e) { night.apply(false); }
+  try { night.setTime(1); await renderer.compileAsync(scene, camera); night.setTime(0); await renderer.compileAsync(scene, camera); } catch (e) { night.setTime(0); }
+  pois = createPois({ scene, camera, layer: $('poi-layer'), card: $('poi-card'), tooltip, doc: state.poiDoc, t, lang: () => state.lang, siteCentre: siteCenter(), flyTo, openMap: (p) => openRegionMap(p), onSelect: (p) => { if (regionMap) regionMap.selectPoi(p, false, true); } });
   loadingEl.classList.add('done');
   setTimeout(() => loadingEl.remove(), 900);
   handleHash();
@@ -318,7 +322,7 @@ function prepareData(data) {
     const xs = l.poly.map((p) => p[0]), ys = l.poly.map((p) => p[1]);
     const num = l.id.replace(/\D+/g, '');
     // "label" = official lot number from the subdivision plan (e.g. A-20); falls back to the model's lot index
-    return { ...l, num, name: l.label || num, hasHouse: false, minx: Math.min(...xs), maxx: Math.max(...xs), miny: Math.min(...ys), maxy: Math.max(...ys), isHouse: false };
+    return { ...l, num, name: l.label || num, park: !!l.hidden || PARK_LOTS.includes(num), hasHouse: false, minx: Math.min(...xs), maxx: Math.max(...xs), miny: Math.min(...ys), maxy: Math.max(...ys), isHouse: false };
   });
   const lotRecById = new Map(state.lots.map((l) => [l.id, l]));
   state.houses = data.houses.map((h, i) => {
@@ -566,7 +570,7 @@ function completeHedges() {
   const hg = buildHedgeGrid();
   const edges = new Map();
   for (const l of state.lots) {
-    if (l.hidden || l.area_m2 < 60 || l.poly.length < 3) continue;
+    if (l.park || l.area_m2 < 60 || l.poly.length < 3) continue;
     for (let i = 0; i < l.poly.length; i++) {
       const a = l.poly[i], b = l.poly[(i + 1) % l.poly.length];
       if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 1.5) continue;
@@ -625,20 +629,20 @@ function completeHedges() {
 function scatterParkTrees(data) {
   const speciesIdx = (k) => data.species.findIndex((s) => s.name.toLowerCase().includes(k));
   const acer = speciesIdx('acer'), palm = speciesIdx('palm'), pine = speciesIdx('pine');
-  const parks = state.lots.filter((l) => l.hidden && l.poly.length >= 3);
+  const parks = state.lots.filter((l) => l.park && l.poly.length >= 3);
   const placed = data.trees.map((t) => [t.p[0], t.p[1]]);
   let seed = 20260905;
   const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
   const out = [];
   for (const park of parks) {
-    const step = 7;
+    const step = 4.5;
     for (let x = park.minx + 2; x < park.maxx - 2; x += step) {
       for (let y = park.miny + 2; y < park.maxy - 2; y += step) {
-        const px = x + (rnd() - 0.5) * 5, py = y + (rnd() - 0.5) * 5;
+        const px = x + (rnd() - 0.5) * 3.5, py = y + (rnd() - 0.5) * 3.5;
         if (!pointInPoly(px, py, park.poly)) continue;
-        if (isPaved(px, py, 2)) continue;
+        if (isPaved(px, py, 1)) continue;
         let tooClose = false;
-        for (const q of placed) { if (Math.abs(q[0] - px) < 5 && Math.abs(q[1] - py) < 5 && Math.hypot(q[0] - px, q[1] - py) < 4.5) { tooClose = true; break; } }
+        for (const q of placed) { if (Math.abs(q[0] - px) < 4 && Math.abs(q[1] - py) < 4 && Math.hypot(q[0] - px, q[1] - py) < 3.4) { tooClose = true; break; } }
         if (tooClose) continue;
         const r = rnd();
         const s = r < 0.5 ? acer : r < 0.85 ? palm : pine;
@@ -787,8 +791,8 @@ function applyFilter() {
 // ---------------------------------------------------------------------------
 function buildLots(data) {
   const pos = [];
-  for (const l of Object.values(data.lots)) {
-    if (l.hidden || l.poly.length < 3) continue;
+  for (const l of state.lots) {
+    if (l.park || l.poly.length < 3) continue;
     for (let i = 0; i < l.poly.length; i++) {
       const a = l.poly[i], b = l.poly[(i + 1) % l.poly.length];
       pos.push(a[0], 0.07, -a[1], b[0], 0.07, -b[1]);
@@ -922,7 +926,7 @@ async function buildTrees(data) {
   const groups = data.species.map((s, i) => ({ s, i, items: [] }));
   if (!paved) buildPavedGrid();
   const extra = scatterParkTrees(data);
-  state.parkTrees = extra.length;
+  state.parkTrees = extra.length; state.parkTreeList = extra;
   data.trees.concat(extra).forEach((tr) => groups[tr.s]?.items.push(tr));
   const tmp = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3(), ax = new THREE.Vector3(0, 1, 0);
   for (const g of groups) {
@@ -980,7 +984,8 @@ function pick(ev) {
     if (lot) {
       const h = state.lotByHouse.get(lot.id);
       if (h && isVisibleHouse(h)) return h;
-      if (!lot.hasHouse && (lot.hidden || lot.area_m2 > 60)) return lot;
+      if (lot.park) return null;                       // parks: nothing to select, no tooltip
+      if (!lot.hasHouse && lot.area_m2 > 60) return lot;
     }
   }
   return null;
@@ -1177,13 +1182,15 @@ function setupUI() {
   $('btn-sold').onclick = () => state.selected && openStatusChange(state.selected, statusOf(state.selected) === 'sold' ? 'release' : 'sold');
   $('btn-night').onclick = () => setNight(!state.night);
   $('btn-map').onclick = () => openRegionMap();
-  document.querySelector('.map-close').onclick = () => { $('map-modal').hidden = true; };
-  $('map-modal').onclick = (ev) => { if (ev.target.id === 'map-modal') $('map-modal').hidden = true; };
+  document.querySelector('.map-close').onclick = () => closeRegionMap();
+  $('map-modal').onclick = (ev) => { if (ev.target.id === 'map-modal') closeRegionMap(); };
+  $('time-slider').oninput = (ev) => { if (night) night.setTime(ev.target.value / 1000); };
   document.addEventListener('keydown', (ev) => {
     if (ev.key === 'Escape') {
       if (!$('lightbox').hidden) { $('lightbox').hidden = true; return; }
       if (!$('modal').hidden) { closeModal(); return; }
-      if (!$('map-modal').hidden) { $('map-modal').hidden = true; return; }
+      if (!$('map-modal').hidden) { closeRegionMap(); return; }
+      if (pois && pois.selected) { pois.select(null); return; }
       clearSelection(); results.classList.remove('show');
     }
     if (ev.target === search) return;
@@ -1240,7 +1247,7 @@ function buildLegend() {
 function updateCounter() {
   const n = state.houses.filter(isVisibleHouse).length;
   $('count-houses').textContent = fmt(n);
-  $('count-lots').textContent = fmt(state.lots.filter((l) => !l.hidden && l.area_m2 > 60).length);
+  $('count-lots').textContent = fmt(state.lots.filter((l) => !l.park && l.area_m2 > 60).length);
 }
 function applyI18n() {
   document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
@@ -1252,6 +1259,8 @@ function applyI18n() {
   buildLegend();
   updateCounter();
   if (regionMap) regionMap.refresh();
+  if (pois) pois.refreshLabels();
+  if (night) onTime(night.t);
 }
 function renderPanel(h) {
   const ty = TYPES[h.type];
@@ -1385,20 +1394,35 @@ function openStatusChange(h, action) {
   };
 }
 function setNight(on) {
-  state.night = on;
-  document.body.classList.toggle('night', on);
-  $('btn-night').textContent = on ? t('day') : t('night');
-  $('btn-night').classList.toggle('active', on);
-  if (night) night.apply(on);
-  if (cars) cars.setNight(on);
+  if (night) night.animateTo(on ? 1 : 0);
 }
-async function openRegionMap() {
+// called by the night module whenever the time of day changes (slider, toggle animation)
+function onTime(tt) {
+  const on = tt >= 0.5;
+  if (state.night !== on) {
+    state.night = on;
+    document.body.classList.toggle('night', on);
+    $('btn-night').textContent = on ? t('day') : t('night');
+    $('btn-night').classList.toggle('active', on);
+  }
+  if (cars) cars.setNight(tt >= 0.55);
+  const sl = $('time-slider');
+  if (sl && document.activeElement !== sl) sl.value = Math.round(tt * 1000);
+  $('time-label').textContent = tt < 0.3 ? t('day') : tt < 0.72 ? t('dusk') : t('night');
+}
+async function openRegionMap(poi = null) {
   $('map-modal').hidden = false;
   if (!regionMap) {
-    regionMap = createRegionMap({ canvas: $('map-canvas'), listEl: $('map-list'), meta: state.satMeta || {}, loadJson, imageUrl, t, lang: () => state.lang, siteBounds: state.data.bounds,
-      onStatus: (busy) => { if (busy) $('map-list').innerHTML = `<div class="muted" style="padding:8px">${t('loading')}</div>`; } });
+    regionMap = createRegionMap({ canvas: $('map-canvas'), listEl: $('map-list'), meta: state.satMeta || {}, loadJson, imageUrl, t, lang: () => state.lang, siteBounds: state.data.bounds, doc: state.poiDoc,
+      onStatus: (busy) => { if (busy) $('map-list').innerHTML = `<div class="muted" style="padding:8px">${t('loading')}</div>`; },
+      onSelect: (p) => { if (pois) pois.select(p, false, false); } });
   }
-  try { await regionMap.open(); } catch (e) { console.warn('region map failed', e); $('map-list').innerHTML = `<div class="muted" style="padding:8px">${t('networkError')}</div>`; }
+  try { await regionMap.open(); if (poi) regionMap.selectPoi(poi, true, true); } catch (e) { console.warn('region map failed', e); $('map-list').innerHTML = `<div class="muted" style="padding:8px">${t('networkError')}</div>`; }
+}
+function closeRegionMap() {
+  $('map-modal').hidden = true;
+  // a place chosen on the map: show its route along the streets in the 3D view
+  if (pois && pois.selected) pois.select(pois.selected, true, false);
 }
 function handleHash() {
   const p = location.hash.match(/p-([0-9a-f]{8,})/i);
@@ -1421,11 +1445,12 @@ function animate(now) {
   lastFrame = now;
   updateFlight(now);
   if (cars) cars.update(dt);
-  if (night) night.update();
+  if (night) night.update(now);
   if (controls.enabled) controls.update();
   rebuildInstances();
   camera.updateMatrixWorld();
   if (csm) csm.update();
+  if (pois) pois.update();
   compass.style.transform = `rotate(${THREE.MathUtils.radToDeg(controls.getAzimuthalAngle())}deg)`;
   if (state.ao && composer) composer.render(); else renderer.render(scene, camera);
 }
@@ -1438,9 +1463,10 @@ window.addEventListener('resize', () => {
   const res = new THREE.Vector2(window.innerWidth, window.innerHeight);
   if (hoverLine) { hoverLine.material.resolution.copy(res); selectLine.material.resolution.copy(res); }
   if (statusLines) statusLines.material.resolution.copy(res);
+  if (pois) pois.resize();
 });
 
-window.__app = { scene, camera, renderer, controls, state, houseGroups, proxies, modelInfo, select, flyTo, setOverview, SUN_DIR, MATS, setNight, openRegionMap, get night() { return night; }, get cars() { return cars; }, get regionMap() { return regionMap; }, get csm() { return csm; }, get composer() { return composer; }, get gtao() { return gtao; } };
+window.__app = { scene, camera, renderer, controls, state, houseGroups, proxies, modelInfo, select, flyTo, setOverview, SUN_DIR, MATS, setNight, setTime: (tt) => night && night.setTime(tt), openRegionMap, get night() { return night; }, get cars() { return cars; }, get regionMap() { return regionMap; }, get pois() { return pois; }, get csm() { return csm; }, get composer() { return composer; }, get gtao() { return gtao; } };
 
 init().catch((err) => {
   console.error(err);

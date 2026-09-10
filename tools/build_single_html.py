@@ -42,9 +42,7 @@ css = open(os.path.join(SITE, "styles.css"), encoding="utf-8").read() + "\n" + o
 
 IMPORT_RE = re.compile(r"^import [^;]*? from '([^']+)';\s*$", re.M)
 def load_module(name):
-    src = open(os.path.join(SITE, "src", name), encoding="utf-8").read().replace("
-", "
-")
+    src = open(os.path.join(SITE, "src", name), encoding="utf-8").read().replace("\r\n", "\n")
     ext = [m.group(0).strip() for m in IMPORT_RE.finditer(src) if not m.group(1).startswith("./")]
     src = IMPORT_RE.sub("", src)                       # drop every import (three.js ones are hoisted below)
     exports = re.findall(r"^export (?:const|let|function|async function) ([A-Za-z_$][\w$]*)", src, re.M)

@@ -25,11 +25,18 @@ Any other static server works for the read-only site (`python -m http.server 517
 - **Sales status** (AVAILABLE / RESERVED / SOLD) shown in the panel, the tooltip, the legend counters and as coloured lot
   outlines in the scene. Reserve, Mark as sold and Release ask for a password that is checked **server-side**
   (see *Sales backend*). "I'm interested" sends a lead to the sales team (never blocks the property).
-- **Day / Night**: night sky and moonlight, 249 streetlights placed lot by lot along the street fronts (never in front
-  of a driveway), warm light pools, real point lights near the camera, lit windows in ~45 % of the houses.
+- **Time of day** (button Day/Night animates it, slider in the legend): the global lighting of the world and of the
+  houses changes continuously (sun -> low orange sun -> moonlight, sky dome day -> dusk -> night with moon and stars,
+  image-based light, fog, exposure). After dusk ~245 streetlights come on (placed lot by lot along the street fronts,
+  never in front of a driveway), with light pools and real point lights near the camera, and ~45 % of the houses show
+  lit windows.
 - **Cars**: seven slow cars drive on the left along the road centrelines (extracted from the dashed road paint).
-- **Region** map: satellite imagery with 53 points of interest (airport emphasised, supermarkets, restaurants,
-  hospitals/clinics, schools, pharmacies, parks, beaches) with road distance and driving time from the site.
+- **Points of interest**: 53 places (airport emphasised, supermarkets, restaurants, hospitals/clinics, schools,
+  pharmacies, parks, beaches) drawn as dots in the main 3D map; clicking one draws its driving route along the streets
+  (OSRM geometry) with road distance and time, and frames it. The **Region** button opens the same places on a 2D
+  satellite map with the list per category.
+- **Parks**: the open-space lots (Blender "hidden" flag plus `PARK_LOTS` in `src/config.js`) are filled with trees,
+  are not selectable and show no tooltip.
 - Responsive: desktop, tablet (narrower panel below the header), phone (bottom-sheet panel, chip legend).
 - Deep links: `#p-<property id without LH_>` (also `#casa-042`).
 
@@ -76,7 +83,8 @@ on Netlify, Vercel, Cloudflare Pages or any web host.
 | `src/main.js` | three.js scene, instancing, picking, camera flights, panel, filters, sales actions |
 | `src/config.js` | House types (areas from the RGA drawings), colour names, image mapping, backend config, UI texts EN/PT |
 | `src/api.js` | Client of the sales backend (read-only fallback to `data/status.json`) |
-| `src/night.js` | Night sky, moonlight, streetlight placement, light pools, lit windows |
+| `src/night.js` | Time of day: sky dome, sun/moon, streetlight placement, light pools, lit windows |
+| `src/poi.js` | POI dots in the 3D view, driving routes along the streets, info card |
 | `src/cars.js` | Road centrelines from the dashed paint, moving cars |
 | `src/region.js` | Regional map (canvas over the satellite imagery, POI list) |
 | `data/site.json` | Exported from Blender (REV11): houses (pid, lot, model, PDF pattern, colour, transform), lot polygons + areas, trees |
@@ -128,5 +136,5 @@ plan draws lots F-19 to F-24 twice; the second copies were left unlabelled (they
 
 `python tools/fetch_poi.py` queries the Overpass API (OpenStreetMap) within 14 km of the site for the categories in
 `CATS`, keeps the nearest named places, routes them with the OSRM demo server (road distance and driving time) and
-converts them to the model frame. Re-run a single category with `python tools/fetch_poi.py restaurant` (Overpass rate
+converts them to the model frame, and fetches every driving route geometry. Re-run a single category with `python tools/fetch_poi.py restaurant` (Overpass rate
 limits), or only the routing with `--route-only`. POI data © OpenStreetMap contributors (ODbL).

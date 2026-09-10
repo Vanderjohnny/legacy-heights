@@ -48,6 +48,9 @@ export const BACKEND = {
 };
 
 export const PARCELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+// Blender lot numbers ("Terrenos NNN") that are parks: not selectable, no tooltip, filled with trees (besides the
+// open-space lots flagged hidden in the export)
+export const PARK_LOTS = ['676', '583', '228', '360', '343', '151', '442', '487', '099', '284', '678', '679', '141', '086', '056'];
 export const STATUS = {
   available: { hex: '#34a853', label: { en: 'Available', pt: 'Disponível' } },
   reserved: { hex: '#f0a020', label: { en: 'Reserved', pt: 'Reservada' } },
@@ -110,7 +113,7 @@ export const I18N = {
     day: 'Day',
     map: 'Region',
     mapTitle: 'Around Legacy Heights',
-    mapHint: 'Road distances and driving times from the site are estimates (OpenStreetMap data, OSRM routing). Drag to pan, scroll to zoom, click a place to highlight it.',
+    mapHint: 'Road distances and driving times from the site are estimates (OpenStreetMap data, OSRM routing). Click a place to draw its route along the streets; drag to pan, scroll to zoom.',
     leadTitle: 'Tell us you are interested',
     leadIntro: 'The sales team receives your message together with the property reference.',
     name: 'Name',
@@ -146,6 +149,12 @@ export const I18N = {
     throttled: 'Too many failed attempts. Please wait 10 minutes and try again.',
     busy: 'The sales server is busy, please try again.',
     loadingMap: 'Loading the map…',
+    lighting: 'Lighting',
+    dusk: 'Dusk',
+    clickForRoute: 'Click to see the route by road',
+    showRoute: 'Frame the route',
+    byRoad: 'by road',
+    straightLine: 'straight line',
   },
   pt: {
     subtitle: 'Lowthers Plantation · Christ Church · Barbados',
@@ -202,7 +211,7 @@ export const I18N = {
     day: 'Dia',
     map: 'Região',
     mapTitle: 'Ao redor do Legacy Heights',
-    mapHint: 'Distâncias por estrada e tempos de carro a partir do empreendimento são estimativas (dados OpenStreetMap, roteamento OSRM). Arraste para mover, role para ampliar, clique em um lugar para destacá-lo.',
+    mapHint: 'Distâncias por estrada e tempos de carro a partir do empreendimento são estimativas (dados OpenStreetMap, roteamento OSRM). Clique em um lugar para desenhar o trajeto pelas ruas; arraste para mover, role para ampliar.',
     leadTitle: 'Registrar interesse',
     leadIntro: 'A equipe de vendas recebe sua mensagem junto com a referência do imóvel.',
     name: 'Nome',
@@ -238,5 +247,11 @@ export const I18N = {
     throttled: 'Muitas tentativas sem sucesso. Aguarde 10 minutos e tente de novo.',
     busy: 'O servidor de vendas está ocupado, tente novamente.',
     loadingMap: 'Carregando o mapa…',
+    lighting: 'Iluminação',
+    dusk: 'Entardecer',
+    clickForRoute: 'Clique para ver o trajeto pelas ruas',
+    showRoute: 'Enquadrar o trajeto',
+    byRoad: 'pela estrada',
+    straightLine: 'em linha reta',
   },
 };

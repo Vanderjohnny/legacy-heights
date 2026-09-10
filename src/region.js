@@ -1,22 +1,13 @@
 // Regional map: the georeferenced satellite imagery (assets/map) drawn on a 2D canvas with the points of interest
-// around the site (data/poi.json, OpenStreetMap + OSRM driving times, see tools/fetch_poi.py).
+// around the site (data/poi.json, OpenStreetMap + OSRM driving routes, see tools/fetch_poi.py).
 // Coordinates are the Blender/site frame (metres, x east, y north), the same frame the 3D scene uses.
+import { POI_CAT as CAT } from './poi.js?v=7';
 
-const CAT = {
-  airport:     { icon: '✈', hex: '#2b6cb0', big: true },
-  supermarket: { icon: '🛒', hex: '#2f855a' },
-  restaurant:  { icon: '🍽', hex: '#c05621' },
-  hospital:    { icon: '✚', hex: '#c53030' },
-  school:      { icon: '🎓', hex: '#6b46c1' },
-  pharmacy:    { icon: '⚕', hex: '#2c7a7b' },
-  park:        { icon: '🌳', hex: '#38a169' },
-  beach:       { icon: '🏖', hex: '#d69e2e' },
-};
 const ORDER = Object.keys(CAT);
 
-export function createRegionMap({ canvas, listEl, meta, loadJson, imageUrl, t, lang, siteBounds, onStatus }) {
+export function createRegionMap({ canvas, listEl, meta, loadJson, imageUrl, t, lang, siteBounds, doc: docIn, onStatus, onSelect }) {
   const ctx = canvas.getContext('2d');
-  let doc = null, images = {}, loading = null;
+  let doc = docIn || null, images = {}, loading = null;
   const view = { cx: 0, cy: 0, scale: 0.02 };     // centre (metres) + pixels per metre
   let selected = null, hovered = null, hits = [];
   let drag = null;
@@ -29,9 +20,9 @@ export function createRegionMap({ canvas, listEl, meta, loadJson, imageUrl, t, l
     return new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = imageUrl(`assets/map/sat_${key}.jpg`); });
   }
   async function ensureLoaded() {
-    if (doc) return;
+    if (images.vast !== undefined) return;
     if (!loading) loading = (async () => {
-      const [d, vast, far] = await Promise.all([loadJson('data/poi.json').catch(() => ({ pois: [], categories: {} })), loadImage('vast'), loadImage('far')]);
+      const [d, vast, far] = await Promise.all([doc ? doc : loadJson('data/poi.json').catch(() => ({ pois: [], categories: {} })), loadImage('vast'), loadImage('far')]);
       doc = d; images = { vast, far };
       fitAll();
     })();
@@ -68,8 +59,17 @@ export function createRegionMap({ canvas, listEl, meta, loadJson, imageUrl, t, l
     ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
     drawImage(images.vast, meta.vast);
     drawImage(images.far, meta.far);
-    // soften the imagery so the markers read well
     ctx.fillStyle = 'rgba(8, 16, 28, 0.18)'; ctx.fillRect(0, 0, W, H);
+
+    // driving route of the selected place, along the streets
+    if (selected && selected.route && selected.route.length >= 2) {
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      for (const [w, col] of [[7 * dpr, 'rgba(10,14,20,0.55)'], [3.5 * dpr, '#ffb347']]) {
+        ctx.lineWidth = w; ctx.strokeStyle = col; ctx.beginPath();
+        selected.route.forEach(([x, y], i) => { const [px, py] = toPx(x, y); if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py); });
+        ctx.stroke();
+      }
+    }
 
     // the site
     const [ax, ay] = toPx(siteBounds.min[0], siteBounds.max[1]), [bx, by] = toPx(siteBounds.max[0], siteBounds.min[1]);
@@ -90,7 +90,7 @@ export function createRegionMap({ canvas, listEl, meta, loadJson, imageUrl, t, l
       ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = c.hex; ctx.fill();
       ctx.fillStyle = '#fff'; ctx.font = `${Math.round((c.big ? 15 : 11) * dpr)}px system-ui, "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(c.icon, x, y + 0.5 * dpr);
-      if (c.big || active) label(`${p.name} · ${p.drive_min} ${t('min')}`, x, y + r + 4 * dpr, dpr, '#fff', false, true);
+      if (c.big || active) label(`${p.name} · ${p.drive_min} ${t('min')} · ${p.road_km} km`, x, y + r + 4 * dpr, dpr, '#fff', false, true);
       hits.push({ p, x, y, r: r + 4 * dpr });
     }
     scaleBar(dpr);
@@ -99,10 +99,9 @@ export function createRegionMap({ canvas, listEl, meta, loadJson, imageUrl, t, l
     ctx.font = `${Math.round(12 * dpr)}px Inter, system-ui, sans-serif`;
     ctx.textAlign = 'center'; ctx.textBaseline = below ? 'top' : 'bottom';
     const w = ctx.measureText(text).width + 12 * dpr, h = 18 * dpr;
-    const ty = below ? y : y;
     ctx.fillStyle = 'rgba(10, 14, 20, 0.72)';
-    roundRect(x - w / 2, below ? ty - 1 * dpr : ty - h + 1 * dpr, w, h, 5 * dpr); ctx.fill();
-    ctx.fillStyle = color; ctx.fillText(text, x, below ? ty + 2 * dpr : ty - 2 * dpr);
+    roundRect(x - w / 2, below ? y - 1 * dpr : y - h + 1 * dpr, w, h, 5 * dpr); ctx.fill();
+    ctx.fillStyle = color; ctx.fillText(text, x, below ? y + 2 * dpr : y - 2 * dpr);
   }
   function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
   function scaleBar(dpr) {
@@ -122,32 +121,32 @@ export function createRegionMap({ canvas, listEl, meta, loadJson, imageUrl, t, l
     for (const h of hits) { const d = Math.hypot(h.x - x, h.y - y); if (d < h.r && d < bd) { best = h.p; bd = d; } }
     return best;
   }
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
   function renderList() {
     const L = lang();
     const groups = ORDER.map((k) => ({ k, items: doc.pois.filter((p) => p.cat === k).sort((a, b) => a.drive_min - b.drive_min) })).filter((g) => g.items.length);
     listEl.innerHTML = groups.map((g) => `<div class="map-cat-title">${doc.categories?.[g.k]?.[L] || g.k}</div>` + g.items.map((p) => {
       const c = CAT[p.cat] || { icon: '•', hex: '#888' };
-      return `<div class="poi ${p === selected ? 'active' : ''}" data-id="${p.id}"><span class="ic" style="background:${c.hex}">${c.icon}</span><span><div class="nm">${esc(p.name)}</div><div class="cat">${doc.categories?.[p.cat]?.[L] || p.cat} · ${p.dist_km} km ${L === 'pt' ? 'em linha reta' : 'straight line'}</div></span><span class="dist"><b>${p.drive_min} ${t('min')}</b>${p.road_km} km</span></div>`;
+      return `<div class="poi ${p === selected ? 'active' : ''}" data-id="${p.id}"><span class="ic" style="background:${c.hex}">${c.icon}</span><span><div class="nm">${esc(p.name)}</div><div class="cat">${doc.categories?.[p.cat]?.[L] || p.cat} · ${p.dist_km} km ${t('straightLine')}</div></span><span class="dist"><b>${p.drive_min} ${t('min')}</b>${p.road_km} km</span></div>`;
     }).join('')).join('');
     listEl.querySelectorAll('.poi').forEach((el) => {
       el.onclick = () => { selectPoi(doc.pois.find((p) => p.id === el.dataset.id), true); };
     });
   }
-  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
-  function selectPoi(p, centre) {
+  function selectPoi(p, centre, silent = false) {
     selected = p;
     if (p && centre) {
       const [sx, sy] = siteCentre();
-      // show the site and the chosen place together
-      view.cx = (sx + p.x) / 2; view.cy = (sy + p.y) / 2;
-      const need = Math.max(Math.abs(p.x - sx), 1500), needY = Math.max(Math.abs(p.y - sy), 1500);
-      view.scale = Math.min(canvas.width / need, canvas.height / needY) * 0.7;
+      let minx = Math.min(sx, p.x), maxx = Math.max(sx, p.x), miny = Math.min(sy, p.y), maxy = Math.max(sy, p.y);
+      for (const [x, y] of p.route || []) { minx = Math.min(minx, x); maxx = Math.max(maxx, x); miny = Math.min(miny, y); maxy = Math.max(maxy, y); }
+      view.cx = (minx + maxx) / 2; view.cy = (miny + maxy) / 2;
+      view.scale = Math.min(canvas.width / Math.max(maxx - minx, 1500), canvas.height / Math.max(maxy - miny, 1500)) * 0.7;
     }
-    draw(); renderList();
+    if (doc) { draw(); renderList(); }
     const active = listEl.querySelector('.poi.active'); if (active) active.scrollIntoView({ block: 'nearest' });
+    if (!silent && onSelect) onSelect(p);
   }
 
-  // interaction: drag to pan, wheel to zoom, click / hover on a marker
   canvas.addEventListener('pointerdown', (ev) => { drag = { x: ev.clientX, y: ev.clientY, cx: view.cx, cy: view.cy, moved: false }; canvas.setPointerCapture(ev.pointerId); });
   canvas.addEventListener('pointermove', (ev) => {
     const r = canvas.getBoundingClientRect();
@@ -191,5 +190,7 @@ export function createRegionMap({ canvas, listEl, meta, loadJson, imageUrl, t, l
     },
     refresh() { if (doc) { renderList(); draw(); } },
     fitAll() { if (doc) { selected = null; fitAll(); draw(); renderList(); } },
+    selectPoi,
+    get selected() { return selected; },
   };
 }
