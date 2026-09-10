@@ -107,7 +107,7 @@ body.night .btn:hover { background: #2a3038; }
 body.night #search-results > div:hover, body.night .poi:hover, body.night .poi.active { background: rgba(255,255,255,0.08); }
 body.night .field input, body.night .field textarea { background: #2a3038; }
 body.night .pid-line code, body.night .modal-card .ref { background: rgba(255,255,255,0.08); }
-body.night .brand-logo { filter: invert(1) brightness(0.95); }
+body.night .brand-logo, body.night .unk-logo { filter: invert(1) brightness(0.95); }
 body.night #tooltip { background: rgba(240,242,245,0.92); color: #111; }
 body.night #tooltip .muted { color: #444; }
 body.night #panel-plan { background: #fff; }
