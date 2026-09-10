@@ -1,6 +1,6 @@
 // Sales backend client. The authoritative state lives in the Google Apps Script web app (tools/backend/Code.gs).
 // Without a backend URL the page runs read-only: statuses come from data/status.json and leads fall back to e-mail.
-import { BACKEND } from './config.js?v=13';
+import { BACKEND } from './config.js?v=14';
 
 // local testing only: http://localhost:5173/?backend=http://localhost:5173/api points the page at the mock backend of tools/dev_server.py
 const LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);

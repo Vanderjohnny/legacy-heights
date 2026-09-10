@@ -48,7 +48,7 @@ export const BACKEND = {
 };
 
 // Opening view (three.js coordinates: x east, y up, z south), captured from the viewer on 2026-09-10
-export const OVERVIEW = { pos: [39.4, 28.6, -530.1], target: [204.6, 0.7, -322.3] };
+export const OVERVIEW = { pos: [-450.8, 340.4, -1161], target: [331.1, 0.7, -250.6] };
 
 export const PARCELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 // Blender lot numbers ("Terrenos NNN") that are parks: not selectable, no tooltip, filled with trees (besides the

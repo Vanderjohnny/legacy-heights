@@ -15,16 +15,16 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // internal modules carry a version query so browsers never pair a new main.js with a cached old module
-import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW } from './config.js?v=13';
-import { api } from './api.js?v=13';
-import { createNight } from './night.js?v=13';
-import { createCars } from './cars.js?v=13';
-import { createRegionMap } from './region.js?v=13';
-import { createPois } from './poi.js?v=13';
-import { createPlanes } from './planes.js?v=13';
+import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW } from './config.js?v=14';
+import { api } from './api.js?v=14';
+import { createNight } from './night.js?v=14';
+import { createCars } from './cars.js?v=14';
+import { createRegionMap } from './region.js?v=14';
+import { createPois } from './poi.js?v=14';
+import { createPlanes } from './planes.js?v=14';
 
 const THREE_VERSION = '0.170.0';
-const ASSET_V = '2026-09-10h';   // bump when models/textures change so browsers do not keep stale copies
+const ASSET_V = '2026-09-10i';   // bump when models/textures change so browsers do not keep stale copies
 const asset = (url) => `${url}${url.includes('?') ? '&' : '?'}v=${ASSET_V}`;
 // Single-file build (tools/build_single_html.py): every asset is embedded as base64 in window.LH_EMBED and nothing is fetched.
 const EMBED = window.LH_EMBED || null;
@@ -1243,7 +1243,7 @@ function setOverview(instant = false) {
   // the opening view picked in the viewer (config.OVERVIEW); portrait phones pull back and up so the site still fits
   const target = new THREE.Vector3(...OVERVIEW.target), pos = new THREE.Vector3(...OVERVIEW.pos);
   const portrait = window.innerHeight > window.innerWidth;
-  if (portrait) { pos.sub(target).multiplyScalar(1.7).add(target); pos.y += 60; }
+  if (portrait) { pos.sub(target).multiplyScalar(1.35).add(target); pos.y += 80; }
   if (instant) { camera.position.copy(pos); controls.target.copy(target); controls.update(); }
   else flyTo(pos, target, 1600);
 }
