@@ -168,3 +168,13 @@ plan draws lots F-19 to F-24 twice; the second copies were left unlabelled (they
 `CATS`, keeps the nearest named places, routes them with the OSRM demo server (road distance and driving time) and
 converts them to the model frame, and fetches every driving route geometry. Re-run a single category with `python tools/fetch_poi.py restaurant` (Overpass rate
 limits), or only the routing with `--route-only`. POI data © OpenStreetMap contributors (ODbL).
+
+## Publishing on a plain web host (HostGator / cPanel)
+
+`python tools/build_hostgator_zip.py` writes `dist/legacy-heights_<date>.zip`: the site files plus an `.htaccess`
+(MIME types for .glb/.hdr/.webp, gzip, cache headers: html/json revalidated, versioned assets cached), `VERSION.txt`
+and `LEIA-ME.txt` (the upload steps in Portuguese). In cPanel's File Manager open the target folder (for example
+`public_html/legacy-heights`), upload the zip and choose Extract; extracting over an older copy overwrites the files.
+The zip has no top-level folder, so it works at the domain root or in any sub-folder (every path is relative). The
+sales backend needs no change. Planned home: https://unkviewer.com (UNK's viewer domain, HostGator).
+
