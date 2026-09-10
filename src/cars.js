@@ -58,6 +58,22 @@ export function createCars(ctx) {
     }
     return dashes;
   }
+  // Douglas-Peucker on the XZ plane: straight runs collapse to their end points, bends keep their vertices
+  function simplify(pts, tol) {
+    if (pts.length < 3) return pts;
+    const a = pts[0], b = pts[pts.length - 1];
+    const dx = b.x - a.x, dz = b.z - a.z, L2 = dx * dx + dz * dz;
+    let best = -1, bi = 0;
+    for (let i = 1; i < pts.length - 1; i++) {
+      const p = pts[i];
+      let d;
+      if (L2 === 0) d = Math.hypot(p.x - a.x, p.z - a.z);
+      else { const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / L2)); d = Math.hypot(p.x - (a.x + t * dx), p.z - (a.z + t * dz)); }
+      if (d > best) { best = d; bi = i; }
+    }
+    if (best <= tol) return [a, b];
+    return simplify(pts.slice(0, bi + 1), tol).slice(0, -1).concat(simplify(pts.slice(bi), tol));
+  }
   function chain(dashes) {
     const cell = 12, grid = new Map();
     const gk = (x, z) => `${Math.floor(x / cell)},${Math.floor(z / cell)}`;
@@ -101,7 +117,7 @@ export function createCars(ctx) {
       };
       const fwd = walk(dashes[s].dx, dashes[s].dz), back = walk(-dashes[s].dx, -dashes[s].dz);
       const seq = [...back.reverse(), s, ...fwd];
-      if (seq.length >= 3) lines.push(seq.map((i) => new THREE.Vector3(dashes[i].x, 0.15, dashes[i].z)));
+      if (seq.length >= 3) lines.push(simplify(seq.map((i) => new THREE.Vector3(dashes[i].x, 0.15, dashes[i].z)), 0.45));
     }
     return lines;
   }
@@ -310,6 +326,7 @@ export function createCars(ctx) {
     const dashes = extractDashes(ctx.paintGeometries || []);
     const lines = chain(dashes);
     curves = lines.map((pts) => { const c = new THREE.CatmullRomCurve3(pts, false, 'centripetal', 0.3); c.arcLengthDivisions = Math.max(50, pts.length * 4); c.len = c.getLength(); return c; }).filter((c) => c.len > 25);
+    for (const c of curves) c.lanes = { 1: laneProfile(c, 1), '-1': laneProfile(c, -1) };
     const n = curves.length ? (ctx.count ?? (isTouch ? 4 : 7)) : 0;
     let seed = 20260909;
     const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
@@ -323,6 +340,33 @@ export function createCars(ctx) {
     }
     return { dashes: dashes.length, lines: lines.length, curves: curves.length, metres: Math.round(curves.reduce((s, c) => s + c.len, 0)), model: !!template, parts: template ? template.parts.map((p) => p.name) : [] };
   }
+  // how far left of the centreline a 2 m wide car can sit at each point of a curve, for one driving direction;
+  // sampled every 2 m, then a min-filter (+-6 m) and a moving average (+-10 m) so the offset changes gently
+  function laneProfile(curve, dir) {
+    const n = Math.max(2, Math.ceil(curve.len / 2) + 1), raw = new Float32Array(n);
+    const P = new THREE.Vector3(), T = new THREE.Vector3(), Lf = new THREE.Vector3();
+    for (let i = 0; i < n; i++) {
+      const u = i / (n - 1), uu = dir > 0 ? u : 1 - u;
+      curve.getPointAt(uu, P); curve.getTangentAt(uu, T); if (dir < 0) T.negate();
+      Lf.crossVectors(UP, T).normalize();
+      let lane = LANE;
+      if (ctx.pavedClass) {
+        const ok = (d) => ctx.pavedClass(P.x + Lf.x * d, -(P.z + Lf.z * d)) >= 2;
+        while (lane > 0.2 && !(ok(lane) && ok(lane + 0.6) && ok(lane + 1.15))) lane -= 0.1;
+      }
+      raw[i] = lane;
+    }
+    const mn = new Float32Array(n), out = new Float32Array(n);
+    for (let i = 0; i < n; i++) { let v = raw[i]; for (let k = Math.max(0, i - 3); k <= Math.min(n - 1, i + 3); k++) v = Math.min(v, raw[k]); mn[i] = v; }
+    for (let i = 0; i < n; i++) { let sum = 0, cnt = 0; for (let k = Math.max(0, i - 5); k <= Math.min(n - 1, i + 5); k++) { sum += mn[k]; cnt++; } out[i] = sum / cnt; }
+    return out;
+  }
+  const laneAt = (curve, u, dir) => {
+    const prof = curve.lanes ? curve.lanes[dir] : null;
+    if (!prof) return LANE;
+    const f = u * (prof.length - 1), i = Math.min(prof.length - 2, Math.floor(f)), k = f - i;
+    return prof[i] * (1 - k) + prof[i + 1] * k;
+  };
   const _p = new THREE.Vector3(), _t = new THREE.Vector3(), _l = new THREE.Vector3(), _look = new THREE.Vector3();
   function place(car) {
     const c = curves[car.curve];
@@ -330,14 +374,10 @@ export function createCars(ctx) {
     c.getPointAt(u, _p); c.getTangentAt(u, _t);
     if (car.dir < 0) _t.negate();
     _l.crossVectors(UP, _t).normalize();                 // left of the heading
-    let lane = LANE;
-    if (ctx.pavedClass) {   // the car (about 2 m wide) must stay on the asphalt: check its centre and its outer edge
-      const ok = (d) => ctx.pavedClass(_p.x + _l.x * d, -(_p.z + _l.z * d)) >= 2;
-      while (lane > 0.2 && !(ok(lane) && ok(lane + 1.15) && ok(lane + 0.6))) lane -= 0.2;
-    }
+    const lane = laneAt(c, car.u, car.dir);          // precomputed, smooth along the road: no lateral stepping
     _p.addScaledVector(_l, lane);
     car.mesh.position.copy(_p).setY(0.15);
-    _look.copy(_p).add(_t);
+    _look.copy(_p).addScaledVector(_t, 6);
     car.mesh.lookAt(_look.x, 0.15, _look.z);
   }
   function nextCurve(car) {
