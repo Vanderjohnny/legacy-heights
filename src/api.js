@@ -1,6 +1,6 @@
 // Sales backend client. The authoritative state lives in the Google Apps Script web app (tools/backend/Code.gs).
 // Without a backend URL the page runs read-only: statuses come from data/status.json and leads fall back to e-mail.
-import { BACKEND } from './config.js?v=17';
+import { BACKEND } from './config.js?v=18';
 
 // local testing only: http://localhost:5173/?backend=http://localhost:5173/api points the page at the mock backend of tools/dev_server.py
 const LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
@@ -9,12 +9,22 @@ if (override && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(override)) 
 
 const hasBackend = () => !!(BACKEND.url && (BACKEND.url.startsWith('https://') || (LOCAL && BACKEND.url.startsWith('http://'))));
 
+// Apps Script answers through a googleusercontent redirect that occasionally fails (404 / network): retry a few times
+async function fetchJson(url, init, tries = 3) {
+  let last;
+  for (let i = 0; i < tries; i++) {
+    try {
+      const res = await fetch(url, init);
+      if (!res.ok) throw new Error(`http-${res.status}`);
+      return await res.json();
+    } catch (e) { last = e; await new Promise((r) => setTimeout(r, 800 * (i + 1))); }
+  }
+  throw last;
+}
 async function call(action, payload = {}) {
   if (!hasBackend()) throw new Error('no-backend');
   // text/plain keeps the request "simple" (no CORS preflight), which is what Apps Script web apps support
-  const res = await fetch(BACKEND.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...payload }), redirect: 'follow' });
-  if (!res.ok) throw new Error(`http-${res.status}`);
-  const data = await res.json();
+  const data = await fetchJson(BACKEND.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...payload }), redirect: 'follow' }, 2);
   if (data && data.error) throw new Error(data.error);
   return data;
 }
@@ -23,11 +33,7 @@ export const api = {
   hasBackend,
   // -> { statuses: { [pid]: { status, updatedAt, by } }, serverTime }
   async statuses() {
-    if (hasBackend()) {
-      const res = await fetch(`${BACKEND.url}?action=statuses&t=${Date.now()}`, { redirect: 'follow' });
-      if (!res.ok) throw new Error(`http-${res.status}`);
-      return res.json();
-    }
+    if (hasBackend()) return fetchJson(`${BACKEND.url}?action=statuses&t=${Date.now()}`, { redirect: 'follow' }, 3);
     const res = await fetch('data/status.json', { cache: 'no-cache' });
     return res.ok ? res.json() : { statuses: {} };
   },

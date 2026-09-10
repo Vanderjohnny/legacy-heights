@@ -15,16 +15,16 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // internal modules carry a version query so browsers never pair a new main.js with a cached old module
-import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW } from './config.js?v=17';
-import { api } from './api.js?v=17';
-import { createNight } from './night.js?v=17';
-import { createCars } from './cars.js?v=17';
-import { createRegionMap } from './region.js?v=17';
-import { createPois } from './poi.js?v=17';
-import { createPlanes } from './planes.js?v=17';
+import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW } from './config.js?v=18';
+import { api } from './api.js?v=18';
+import { createNight } from './night.js?v=18';
+import { createCars } from './cars.js?v=18';
+import { createRegionMap } from './region.js?v=18';
+import { createPois } from './poi.js?v=18';
+import { createPlanes } from './planes.js?v=18';
 
 const THREE_VERSION = '0.170.0';
-const ASSET_V = '2026-09-10l';   // bump when models/textures change so browsers do not keep stale copies
+const ASSET_V = '2026-09-10m';   // bump when models/textures change so browsers do not keep stale copies
 const asset = (url) => `${url}${url.includes('?') ? '&' : '?'}v=${ASSET_V}`;
 // Single-file build (tools/build_single_html.py): every asset is embedded as base64 in window.LH_EMBED and nothing is fetched.
 const EMBED = window.LH_EMBED || null;
