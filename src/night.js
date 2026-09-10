@@ -106,6 +106,77 @@ export function createNight(ctx) {
   }
 
   // ------------------------------------------------------------------------------------------------------------
+  // Lights of the surroundings at night: points sampled from the satellite imagery itself (bright, low-saturation
+  // pixels = roofs and roads of the neighbouring areas), one set per imagery level, each level excluding the area of
+  // the finer one and the site itself.
+  // ------------------------------------------------------------------------------------------------------------
+  const CITY = { near: { n: 384, count: 1400, size: 6 }, mid: { n: 384, count: 2600, size: 8 }, far: { n: 448, count: 3200, size: 16 }, vast: { n: 448, count: 2600, size: 40 } };
+  function buildCityLights() {
+    if (S.city || (S.cityTries || 0) > 40) return;
+    const byLevel = {};
+    for (const sm of satMeshes) byLevel[sm.userData.level] = sm;
+    const levels = ['near', 'mid', 'far', 'vast'].filter((k) => byLevel[k]);
+    if (!levels.length) { S.cityTries = 99; return; }
+    for (const k of levels) { const im = byLevel[k].material.map?.image; if (!(im && im.complete && im.naturalWidth)) { S.cityTries = (S.cityTries || 0) + 1; return; } }
+    const b = ctx.siteBounds, margin = 30;
+    const inRect = (x, y, c) => x >= Math.min(c.nw[0], c.sw[0]) && x <= Math.max(c.ne[0], c.se[0]) && y >= Math.min(c.sw[1], c.se[1]) && y <= Math.max(c.nw[1], c.ne[1]);
+    let seed = 20260910;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    const dot = document.createElement('canvas'); dot.width = dot.height = 32;
+    const dc = dot.getContext('2d'); const g = dc.createRadialGradient(16, 16, 0, 16, 16, 16);
+    g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.35, 'rgba(255,255,255,0.7)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    dc.fillStyle = g; dc.fillRect(0, 0, 32, 32);
+    const dotTex = new THREE.CanvasTexture(dot); dotTex.colorSpace = THREE.SRGBColorSpace;
+    S.city = new THREE.Group(); S.city.visible = false;
+    let total = 0;
+    levels.forEach((k, li) => {
+      const sm = byLevel[k], c = sm.userData.corners, cfg = CITY[k], im = sm.material.map.image;
+      const finer = li > 0 ? byLevel[levels[li - 1]].userData.corners : null;
+      const cv = document.createElement('canvas'); cv.width = cv.height = cfg.n;
+      const cx = cv.getContext('2d', { willReadFrequently: true });
+      cx.drawImage(im, 0, 0, cfg.n, cfg.n);
+      const px = cx.getImageData(0, 0, cfg.n, cfg.n).data;
+      const cand = [];
+      for (let v = 0; v < cfg.n; v++) for (let u = 0; u < cfg.n; u++) {
+        const i = (v * cfg.n + u) * 4, r = px[i] / 255, gg = px[i + 1] / 255, bb = px[i + 2] / 255;
+        const L = 0.2126 * r + 0.7152 * gg + 0.0722 * bb, sat = Math.max(r, gg, bb) - Math.min(r, gg, bb);
+        if (L < 0.4 || sat > 0.22) continue;                       // dark, vegetation, red soil, sea: no light
+        if (bb > r * 1.15 && bb > gg * 1.05) continue;              // sea / pools
+        const x = c.nw[0] + (u + 0.5) / cfg.n * (c.se[0] - c.nw[0]), y = c.nw[1] + (v + 0.5) / cfg.n * (c.se[1] - c.nw[1]);
+        if (x > b.min[0] - margin && x < b.max[0] + margin && y > b.min[1] - margin && y < b.max[1] + margin) continue;
+        if (finer && inRect(x, y, finer)) continue;
+        cand.push([x, y, L]);
+      }
+      // random subset, brighter pixels preferred
+      for (let i = cand.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); const tmp = cand[i]; cand[i] = cand[j]; cand[j] = tmp; }
+      const pick = cand.slice(0, cfg.count);
+      if (!pick.length) return;
+      const pos = new Float32Array(pick.length * 3), col = new Float32Array(pick.length * 3);
+      pick.forEach(([x, y, L], i) => {
+        pos[i * 3] = x; pos[i * 3 + 1] = sm.userData.y + 1.5 + li * 0.5; pos[i * 3 + 2] = -y;
+        const r = rnd(), br = 0.55 + rnd() * 0.7;
+        const cc = r < 0.65 ? [1, 0.82, 0.55] : r < 0.85 ? [0.85, 0.9, 1] : [1, 0.6, 0.25];
+        col[i * 3] = cc[0] * br; col[i * 3 + 1] = cc[1] * br; col[i * 3 + 2] = cc[2] * br;
+      });
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size: cfg.size, sizeAttenuation: true, map: dotTex, vertexColors: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, alphaTest: 0.02 }));
+      pts.frustumCulled = false; pts.renderOrder = 2;
+      S.city.add(pts); total += pick.length;
+    });
+    scene.add(S.city);
+    S.cityCount = total;
+    if (S.t > 0.5) applyCity(S.t);
+  }
+  function applyCity(t) {
+    if (!S.city) return;
+    const k = smooth(0.52, 0.85, t) * 0.95;
+    S.city.visible = k > 0;
+    for (const p of S.city.children) p.material.opacity = k;
+  }
+
+  // ------------------------------------------------------------------------------------------------------------
   // Streetlight placement: every street-front edge of every lot gives candidate positions at its two corners
   // (shared with the neighbour), pushed 1 m onto the pavement. Corners in front of a driveway (concrete access
   // inside the lot) are moved along the edge past the driveway. Same-side lamps keep >= LAMP.spacing metres.
@@ -278,7 +349,9 @@ export function createNight(ctx) {
     for (const sm of satMeshes) sm.material.color.copy(_c2.copy(COL.satDay).lerp(COL.satNight, tint));
     _c2.copy(COL.treeDay).lerp(COL.treeNight, tint);
     treeGroup.traverse((o) => { if (o.material?.isMeshBasicMaterial) o.material.color.copy(_c2); });
-    // lights of the houses and of the streets
+    // lights of the houses, of the streets and of the surroundings
+    if (t > 0.3 && !S.city) buildCityLights();
+    applyCity(t);
     S.lenses.material.emissiveIntensity = 6 * k;
     S.pools.material.opacity = 0.4 * k; S.pools.visible = k > 0;
     for (const pl of S.points) pl.intensity = LAMP.pointIntensity * k;
@@ -310,8 +383,8 @@ export function createNight(ctx) {
 
   function build() {
     SUN_LOW.copy(ctx.sunDir).setY(0).normalize().multiplyScalar(0.98).setY(0.14).normalize();
-    buildSky(); buildLamps(); buildWindows();
+    buildSky(); buildLamps(); buildWindows(); buildCityLights();
     setTime(0);
   }
-  return { build, setTime, animateTo, update, setWindows, isLit, get t() { return S.t; }, get on() { return S.t >= 0.5; }, get lamps() { return S.lamps; }, get objects() { return S; } };
+  return { build, setTime, animateTo, update, setWindows, isLit, get t() { return S.t; }, get on() { return S.t >= 0.5; }, get lamps() { return S.lamps; }, get cityLights() { return S.cityCount || 0; }, get objects() { return S; } };
 }

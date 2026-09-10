@@ -1,9 +1,10 @@
 // A few slow cars driving on the subdivision roads. The road centrelines come from the dashed white centreline
 // painted in the Blender model ("Pintura viaria" material): each dash is one small mesh island, the dashes are chained
 // into polylines and turned into smooth curves. Cars keep to the LEFT of the centreline (Barbados drives on the left).
+// The car body is a smooth lofted hatchback (cross sections along the length, shared vertices -> rounded shading).
 import * as THREE from 'three';
 
-const CAR_COLORS = [0xf2f2f2, 0x1f2a44, 0x8a8f96, 0xb32020, 0x2b2b2b, 0xd8d8d8, 0x2d5d8f, 0xe0a94a];
+const CAR_COLORS = [0x8f2a1e, 0xf2f2f2, 0x1f2a44, 0x8a8f96, 0x2b2b2b, 0xd8d8d8, 0x2d5d8f, 0xe0a94a];
 const LANE = 1.75;          // metres from the centreline to the middle of the lane
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -43,7 +44,6 @@ export function createCars(ctx) {
       }
       for (const c of comps.values()) {
         if (c.pts.length < 4 || c.pts.length > 40) continue;
-        // principal axis through the farthest pair of points
         let best = 0, pa = null, pb = null;
         for (let i = 0; i < c.pts.length; i++) for (let j = i + 1; j < c.pts.length; j++) {
           const d = Math.hypot(c.pts[j][0] - c.pts[i][0], c.pts[j][1] - c.pts[i][1]);
@@ -65,7 +65,6 @@ export function createCars(ctx) {
       for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const l = grid.get(`${gx + a},${gz + b}`); if (l) out.push(...l); }
       return out;
     };
-    // next dash along the oriented direction (sx, sz)
     const next = (i, sx, sz, used) => {
       const d = dashes[i];
       let best = null, bt = Infinity;
@@ -106,12 +105,59 @@ export function createCars(ctx) {
   }
 
   // ------------------------------------------------------------------------------------------------------------
-  // cars
+  // car body: lofted cross sections. Local +Z is the front, +Y up, X to the right.
   // ------------------------------------------------------------------------------------------------------------
-  const glassMat = new THREE.MeshStandardMaterial({ color: 0x1b2430, roughness: 0.2, metalness: 0.4 });
+  function loft(sections, tint) {
+    // each section: { z, pts: [[halfWidth, height], ...] } from the bottom centre (w = 0) to the top centre (w = 0)
+    const rings = sections.map((s) => {
+      const r = [];
+      for (const [w, h] of s.pts) r.push([w, h]);
+      for (let i = s.pts.length - 1; i >= 0; i--) { const [w, h] = s.pts[i]; if (w > 1e-4) r.push([-w, h]); }
+      return r;
+    });
+    const m = rings[0].length, n = rings.length;
+    const pos = [], col = [], idx = [];
+    rings.forEach((ring, i) => ring.forEach(([w, h]) => { pos.push(w, h, sections[i].z); const k = tint ? tint(h, sections[i].z) : 1; col.push(k, k, k); }));
+    for (let i = 0; i < n - 1; i++) for (let j = 0; j < m; j++) {
+      const a = i * m + j, b = i * m + (j + 1) % m, c = (i + 1) * m + (j + 1) % m, d = (i + 1) * m + j;
+      idx.push(a, c, b, a, d, c);
+    }
+    // end caps
+    for (const [i, flip] of [[0, false], [n - 1, true]]) {
+      const cx = 0, cy = rings[i].reduce((s, q) => s + q[1], 0) / m;
+      const centre = pos.length / 3; pos.push(cx, cy, sections[i].z); col.push(1, 1, 1);
+      for (let j = 0; j < m; j++) { const a = i * m + j, b = i * m + (j + 1) % m; if (flip) idx.push(centre, a, b); else idx.push(centre, b, a); }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    return g;
+  }
+  // lower body (sill to belt line, hood and hatch deck); widths scaled at the ends so the corners round off
+  const body = (k, yTop, dz = 0) => [[0, 0.3], [0.72 * k, 0.3], [0.84 * k, 0.5], [0.87 * k, 0.78], [0.8 * k, yTop], [0, yTop + 0.03]];
+  const BODY_SECTIONS = [
+    { z: 2.1, pts: body(0.55, 0.62) }, { z: 2.05, pts: body(0.86, 0.72) }, { z: 1.85, pts: body(0.97, 0.84) }, { z: 1.3, pts: body(1, 0.9) },
+    { z: 0.6, pts: body(1, 0.96) }, { z: -0.5, pts: body(1, 0.99) }, { z: -1.5, pts: body(1, 1.0) }, { z: -1.9, pts: body(0.97, 0.98) },
+    { z: -2.05, pts: body(0.86, 0.86) }, { z: -2.1, pts: body(0.55, 0.62) },
+  ];
+  // greenhouse (windscreen, side glass, hatch glass)
+  const glassSec = (z, yBase, wBase, yRoof, wRoof) => ({ z, pts: [[0, yBase], [wBase, yBase], [wRoof, yRoof], [0, yRoof + 0.02]] });
+  const GLASS_SECTIONS = [
+    glassSec(0.62, 0.96, 0.8, 0.97, 0.79), glassSec(0.1, 0.98, 0.83, 1.3, 0.72), glassSec(-0.4, 0.99, 0.84, 1.38, 0.73),
+    glassSec(-1.2, 1.0, 0.84, 1.36, 0.72), glassSec(-1.6, 1.0, 0.82, 1.14, 0.76), glassSec(-1.82, 0.99, 0.78, 1.0, 0.76),
+  ];
+  const ROOF_SECTIONS = [
+    { z: 0.05, pts: [[0, 1.3], [0.66, 1.3], [0.7, 1.32], [0, 1.325]] }, { z: -0.4, pts: [[0, 1.38], [0.7, 1.38], [0.74, 1.4], [0, 1.405]] },
+    { z: -1.2, pts: [[0, 1.36], [0.69, 1.36], [0.73, 1.38], [0, 1.385]] }, { z: -1.45, pts: [[0, 1.26], [0.64, 1.26], [0.68, 1.28], [0, 1.285]] },
+  ];
+  let bodyGeo = null, glassGeo = null, roofGeo = null;
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x141b26, roughness: 0.12, metalness: 0.35, envMapIntensity: 1.2 });
   const darkMat = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.9 });
-  const lampMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, emissive: 0xfff4d6, emissiveIntensity: 0 });
-  const tailMat = new THREE.MeshStandardMaterial({ color: 0x661111, emissive: 0xff2a1a, emissiveIntensity: 0 });
+  const rimMat = new THREE.MeshStandardMaterial({ color: 0xc9ccd1, roughness: 0.35, metalness: 0.8 });
+  const lampMat = new THREE.MeshStandardMaterial({ color: 0xe8e8e0, emissive: 0xfff4d6, emissiveIntensity: 0, roughness: 0.3 });
+  const tailMat = new THREE.MeshStandardMaterial({ color: 0x7a1414, emissive: 0xff2a1a, emissiveIntensity: 0, roughness: 0.3 });
   let coneTex = null;
   function coneTexture() {
     if (coneTex) return coneTex;
@@ -124,20 +170,29 @@ export function createCars(ctx) {
     return coneTex;
   }
   function makeCar(color) {
+    if (!bodyGeo) {
+      bodyGeo = loft(BODY_SECTIONS, (h) => (h < 0.42 ? 0.32 : 1));          // dark sill / bumper band
+      glassGeo = loft(GLASS_SECTIONS, null);
+      roofGeo = loft(ROOF_SECTIONS, null);
+    }
     const car = new THREE.Group();
-    const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.25 });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.5, 4.1), bodyMat); body.position.y = 0.6;
-    const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.55, 0.5, 2.0), glassMat); cabin.position.set(0, 1.1, -0.25);
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.06, 1.9), bodyMat); roof.position.set(0, 1.37, -0.25);
-    const hood = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.18, 1.0), bodyMat); hood.position.set(0, 0.93, 1.35);
-    car.add(body, cabin, roof, hood);
-    const wheelGeo = new THREE.CylinderGeometry(0.32, 0.32, 0.22, 10).rotateZ(Math.PI / 2);
-    for (const [x, z] of [[-0.82, 1.3], [0.82, 1.3], [-0.82, -1.3], [0.82, -1.3]]) { const w = new THREE.Mesh(wheelGeo, darkMat); w.position.set(x, 0.32, z); car.add(w); }
-    const hl = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.16, 0.06), lampMat);
-    const hl2 = hl.clone(); hl.position.set(-0.55, 0.72, 2.06); hl2.position.set(0.55, 0.72, 2.06);
-    const tl = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.14, 0.06), tailMat);
-    const tl2 = tl.clone(); tl.position.set(-0.55, 0.72, -2.06); tl2.position.set(0.55, 0.72, -2.06);
-    car.add(hl, hl2, tl, tl2);
+    const paint = new THREE.MeshStandardMaterial({ color, roughness: 0.32, metalness: 0.45, vertexColors: true, envMapIntensity: 1.1 });
+    const roofPaint = new THREE.MeshStandardMaterial({ color, roughness: 0.32, metalness: 0.45, envMapIntensity: 1.1 });
+    car.add(new THREE.Mesh(bodyGeo, paint), new THREE.Mesh(glassGeo, glassMat), new THREE.Mesh(roofGeo, roofPaint));
+    const tyre = new THREE.CylinderGeometry(0.33, 0.33, 0.24, 14).rotateZ(Math.PI / 2);
+    const rim = new THREE.CylinderGeometry(0.2, 0.2, 0.25, 12).rotateZ(Math.PI / 2);
+    for (const [x, z] of [[-0.75, 1.32], [0.75, 1.32], [-0.75, -1.3], [0.75, -1.3]]) {
+      const w = new THREE.Mesh(tyre, darkMat); w.position.set(x, 0.33, z); car.add(w);
+      const r = new THREE.Mesh(rim, rimMat); r.position.set(x, 0.33, z); car.add(r);
+    }
+    const hl = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.14, 0.08), lampMat);
+    const hl2 = hl.clone(); hl.position.set(-0.52, 0.7, 2.06); hl2.position.set(0.52, 0.7, 2.06);
+    const tl = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.12, 0.08), tailMat);
+    const tl2 = tl.clone(); tl.position.set(-0.52, 0.72, -2.06); tl2.position.set(0.52, 0.72, -2.06);
+    const grille = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.12, 0.05), darkMat); grille.position.set(0, 0.62, 2.1);
+    const mirror = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.09, 0.07), paint);
+    const mirror2 = mirror.clone(); mirror.position.set(-0.92, 1.04, 0.5); mirror2.position.set(0.92, 1.04, 0.5);
+    car.add(hl, hl2, tl, tl2, grille, mirror, mirror2);
     const cone = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 9).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: coneTexture(), transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
     cone.position.set(0, -0.42, 6.5); cone.rotation.y = Math.PI; cone.visible = false; cone.renderOrder = 3;
     car.add(cone);
@@ -175,7 +230,6 @@ export function createCars(ctx) {
     _look.copy(_p).add(_t);
     car.mesh.lookAt(_look.x, 0.15, _look.z);
   }
-  // when a curve ends: continue on a curve that starts (or ends) close by and roughly ahead, otherwise start elsewhere
   function nextCurve(car) {
     const c = curves[car.curve];
     const end = car.dir > 0 ? c.getPointAt(1) : c.getPointAt(0);
@@ -209,5 +263,5 @@ export function createCars(ctx) {
     tailMat.emissiveIntensity = on ? 2.5 : 0;
     for (const car of cars) car.mesh.userData.cone.visible = on;
   }
-  return { build, update, setNight, get curves() { return curves; }, get cars() { return cars; }, get group() { return group; } };
+  return { build, update, setNight, makeCar, get curves() { return curves; }, get cars() { return cars; }, get group() { return group; } };
 }
