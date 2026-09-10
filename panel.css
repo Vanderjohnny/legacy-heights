@@ -107,7 +107,7 @@ body.night .btn:hover { background: #2a3038; }
 body.night #search-results > div:hover, body.night .poi:hover, body.night .poi.active { background: rgba(255,255,255,0.08); }
 body.night .field input, body.night .field textarea { background: #2a3038; }
 body.night .pid-line code, body.night .modal-card .ref { background: rgba(255,255,255,0.08); }
-body.night .brand-logo, body.night .unk-logo { filter: invert(1) brightness(0.95); }
+body.night .brand-logo:not(.large), body.night .unk-logo { filter: invert(1) brightness(0.95); }
 body.night #tooltip { background: rgba(240,242,245,0.92); color: #111; }
 body.night #tooltip .muted { color: #444; }
 body.night #panel-plan { background: #fff; }
@@ -175,3 +175,7 @@ body.night .icon-btn { background: rgba(255,255,255,0.12); color: #fff; }
 body.night .poi-facts div { background: rgba(255,255,255,0.08); }
 @media (max-width: 900px) { #poi-card { top: 170px; } }
 @media (max-width: 640px) { #poi-card { top: 132px; left: 8px; right: 8px; width: auto; padding: 10px 10px 8px; } .poi-dot .lbl { font-size: 10px; } .time-row { margin-top: 4px; } .time-row #time-label { min-width: 54px; } }
+/* phases under construction (locked until the access password is accepted) */
+.pchip.locked { opacity: 0.55; }
+.pchip.locked::after { content: '🔒'; font-size: 9px; margin-left: 3px; }
+.pchip.locked:hover { opacity: 0.9; }

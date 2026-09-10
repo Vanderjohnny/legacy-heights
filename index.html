@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%23101418%27/%3E%3Ctext x=%2732%27 y=%2742%27 font-family=%27Georgia,serif%27 font-size=%2728%27 text-anchor=%27middle%27 fill=%27%23fff%27%3ELH%3C/text%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="styles.css?v=12" />
-  <link rel="stylesheet" href="panel.css?v=8" />
+  <link rel="stylesheet" href="styles.css?v=13" />
+  <link rel="stylesheet" href="panel.css?v=9" />
   <script type="importmap">
     {
       "imports": {
@@ -26,8 +26,8 @@
   <div id="loading">
     <div class="loading-card">
       <img class="brand-logo large" src="assets/logo.png" alt="Legacy Heights" />
-      <p id="loading-text" data-i18n="loading">Loading the subdivision…</p>
       <div class="bar"><div id="loading-bar"></div></div>
+      <p id="loading-text" data-i18n="loading" hidden>Loading the subdivision…</p>
     </div>
   </div>
 
@@ -89,7 +89,6 @@
           <span id="panel-status" class="status-badge available">Available</span>
         </div>
         <p id="panel-sub"></p>
-        <p class="pid-line"><span data-i18n="propertyId">Property ID</span> <code id="panel-pid"></code><span id="panel-updated" class="muted"></span></p>
       </div>
       <div id="panel-body"></div>
       <section class="plan-section">
@@ -139,6 +138,6 @@
 
   <div id="toast"></div>
 
-  <script type="module" src="src/main.js?v=20"></script>
+  <script type="module" src="src/main.js?v=21"></script>
 </body>
 </html>

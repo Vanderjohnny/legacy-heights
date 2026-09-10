@@ -3,11 +3,14 @@
 export const SQFT_PER_M2 = 10.7639;
 
 // House types as tabulated on the Parcel A Extract Plan (gross floor / roof areas per house, sq ft)
+// phases (parcels) open to the public without the password; the others show "under construction" until unlocked
+export const OPEN_PARCELS = ['A'];
+
 export const TYPES = {
-  1: { key: 'type1', beds: 2, baths: 2, gfaSqft: 725, roofSqft: 853, units: 1, hex: '#7bd944', label: { en: 'Type 1 House', pt: 'Casa Tipo 1' } },
-  2: { key: 'type2', beds: 3, baths: 1, gfaSqft: 839, roofSqft: 970, units: 1, hex: '#d58cff', label: { en: 'Type 2 House', pt: 'Casa Tipo 2' } },
-  3: { key: 'type3', beds: 3, baths: 2, gfaSqft: 874, roofSqft: 975, units: 1, hex: '#3e9bff', label: { en: 'Type 3 House', pt: 'Casa Tipo 3' } },
-  4: { key: 'type4', beds: 2, baths: 1, gfaSqft: 700, roofSqft: 799, units: 2, hex: '#f0b429', label: { en: 'Type 4 Duplex', pt: 'Duplex Tipo 4' } },
+  1: { key: 'type1', beds: 2, baths: 2, gfaSqft: 725, roofSqft: 853, units: 1, hex: '#7bd944', label: { en: 'House Altura', pt: 'Casa Altura' } },
+  2: { key: 'type2', beds: 3, baths: 1, gfaSqft: 839, roofSqft: 970, units: 1, hex: '#d58cff', label: { en: 'House Horizon', pt: 'Casa Horizon' } },
+  3: { key: 'type3', beds: 3, baths: 2, gfaSqft: 874, roofSqft: 975, units: 1, hex: '#3e9bff', label: { en: 'House Pinnacle', pt: 'Casa Pinnacle' } },
+  4: { key: 'type4', beds: 2, baths: 1, gfaSqft: 700, roofSqft: 799, units: 2, hex: '#f0b429', label: { en: 'House Vista', pt: 'Casa Vista' } },
 };
 
 // Colour pattern used in the PDF ("padrao_pdf" custom property in Blender) -> house type
@@ -102,7 +105,8 @@ export const I18N = {
     showAll: 'Show all types',
     source: 'Areas per drawings 25:04/02D and 25:04/A-01A (Richard Gill Associates Ltd.). Lot areas measured on the 3D model.',
     parcels: 'Phases',
-    parcelsHint: 'Show or hide the houses of each parcel',
+    parcelsHint: 'Show or hide the houses of each phase',
+    phase: 'Phase', underConstruction: 'under construction', unlockIntro: 'This phase is not released yet. Enter the access password to preview every phase of the development.', unlock: 'Unlock', checking: 'Checking…', unlocked: 'All phases unlocked.', lockedHint: 'Under construction · click to enter the password',
     propertyId: 'Property ID',
     status: 'Status',
     houseModel: 'House model',
@@ -204,7 +208,8 @@ export const I18N = {
     showAll: 'Mostrar todos os tipos',
     source: 'Áreas conforme desenhos 25:04/02D e 25:04/A-01A (Richard Gill Associates Ltd.). Áreas de lote medidas no modelo 3D.',
     parcels: 'Fases',
-    parcelsHint: 'Mostre ou oculte as casas de cada parcela',
+    parcelsHint: 'Mostre ou oculte as casas de cada fase',
+    phase: 'Fase', underConstruction: 'em construção', unlockIntro: 'Esta fase ainda não foi liberada. Digite a senha de acesso para ver todas as fases do empreendimento.', unlock: 'Liberar', checking: 'Verificando…', unlocked: 'Todas as fases liberadas.', lockedHint: 'Em construção · clique para digitar a senha',
     propertyId: 'ID do imóvel',
     status: 'Situação',
     houseModel: 'Modelo da casa',

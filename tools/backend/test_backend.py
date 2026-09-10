@@ -100,6 +100,12 @@ if not args.skip_lead:
     r = post({'action': 'interest', 'lead': {'pid': pid, 'code': CODE, 'name': 'Backend test', 'email': 'test@example.com', 'phone': '+1 246 000 0000', 'message': 'automated test lead - please ignore', 'model': 'Test', 'parcel': 'A', 'lang': 'en', 'page': URL}})
     check('valid lead is accepted', r.get('ok') is True, json.dumps(r))
     check('lead does not change the status', pid not in get_statuses())
+r = post({'action': 'unlock', 'password': 'definitely-wrong'})
+if r.get('error') == 'unknown-action': print('SKIP unlock: this deployment predates the action (the site falls back to a release probe)')
+else:
+    check('unlock rejects a wrong password', r.get('error') == 'unauthorized', json.dumps(r))
+    r = post({'action': 'unlock', 'password': args.reserve})
+    check('unlock accepts the sales password', r.get('ok') is True, json.dumps(r))
 r = post({'action': 'nonsense'})
 check('unknown action is rejected', r.get('error') == 'unknown-action', json.dumps(r))
 

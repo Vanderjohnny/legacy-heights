@@ -1,6 +1,6 @@
 // Sales backend client. The authoritative state lives in the Google Apps Script web app (tools/backend/Code.gs).
 // Without a backend URL the page runs read-only: statuses come from data/status.json and leads fall back to e-mail.
-import { BACKEND } from './config.js?v=20';
+import { BACKEND } from './config.js?v=21';
 
 // local testing only: http://localhost:5173/?backend=http://localhost:5173/api points the page at the mock backend of tools/dev_server.py
 const LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
@@ -40,5 +40,17 @@ export const api = {
   reserve: (pid, code, password, by) => call('reserve', { pid, code, password, by }),
   markSold: (pid, code, password, by) => call('sold', { pid, code, password, by }),
   release: (pid, code, password, by) => call('release', { pid, code, password, by }),
+  // phases gate: the password is checked by the backend, never in the page. Deployments older than the 'unlock'
+  // action are probed with a 'release' on a property id that cannot exist: the server answers 'not-available' when
+  // the password is right (nothing changes) and 'unauthorized' when it is not.
+  unlock: async (password) => {
+    try { return await call('unlock', { password }); }
+    catch (e) {
+      if (e.message !== 'unknown-action') throw e;
+      try { await call('release', { pid: 'LH_' + '0'.repeat(32), code: '-', password, by: 'unlock' }); }
+      catch (e2) { if (e2.message === 'not-available') return { ok: true }; throw e2; }
+      return { ok: true };
+    }
+  },
   interest: (lead) => call('interest', { lead }),
 };

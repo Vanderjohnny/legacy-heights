@@ -46,6 +46,13 @@ Any other static server works for the read-only site (`python -m http.server 517
 - **Branding**: the header and the loading card show the Legacy Heights logotype (`assets/logo.png`, black ink on a
   transparent background, inverted by CSS at night) above the address line; a "Powered by UNK.GROUP" card below the
   legend (`assets/unk.png`) links to https://unk.group.
+- **Phases gate**: only phase A is open when the page loads; the other phases show a lock in the legend and open a
+  "Phase X · under construction" dialog asking for the access password. The password is checked by the sales backend
+  (`unlock` action, or a harmless `release` probe on older deployments), never in the page; once accepted, every
+  phase is shown for the rest of the browser session. `OPEN_PARCELS` in `src/config.js` lists the open phases.
+- **House names**: the legend, tooltips and panel use the plan names (House Altura / Horizon / Pinnacle / Vista); the
+  panel title reads "Lot A-21 · Pinnacle" and shows the phase, the plan, layout, areas and facade colour only.
+- **Loading screen**: the aerial panorama of the site (`assets/img/loading.jpg`) with the logotype and a thin bar.
 - **Language**: the public site is English only (`state.lang = 'en'`, no toggle); the Portuguese strings remain in
   `src/config.js` for a future switch.
 - **Materials**: the ground uses PBR texture sets (Poly Haven, CC0, `tools/fetch_textures.py`: grass, asphalt,

@@ -20,16 +20,17 @@ h1, h2, h3, p { margin: 0; }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15); }
 
 /* loading */
-#loading { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: linear-gradient(180deg, #6fa3d6 0%, #cfe0ef 60%, #e9f0f5 100%); transition: opacity 0.8s ease; }
+/* loading: the aerial panorama of the site (assets/img/loading.jpg) with the logotype on it */
+#loading { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: #24384a url(assets/img/loading.jpg) center / cover no-repeat; transition: opacity 0.8s ease; }
+#loading::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0.38) 0%, rgba(0,0,0,0.12) 45%, rgba(0,0,0,0) 75%); pointer-events: none; }
 #loading.done { opacity: 0; pointer-events: none; }
-.loading-card { text-align: center; padding: 36px 44px; background: var(--paper); backdrop-filter: blur(14px); border-radius: 22px; box-shadow: var(--shadow); min-width: 300px; }
-.loading-card h1 { font-family: var(--serif); font-weight: 500; font-size: 30px; letter-spacing: -0.01em; margin: 10px 0 4px; }
-.loading-card p { color: var(--ink-2); margin-bottom: 18px; }
-.bar { height: 6px; background: rgba(16,20,24,0.1); border-radius: 6px; overflow: hidden; }
-#loading-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #e8962a, #f7c264); transition: width 0.25s ease; }
+.loading-card { position: relative; text-align: center; width: min(52vw, 440px); }
+.loading-card p { color: rgba(255,255,255,0.88); margin-top: 14px; font-size: 13px; text-shadow: 0 1px 6px rgba(0,0,0,0.6); }
+.bar { height: 3px; background: rgba(255,255,255,0.28); border-radius: 3px; overflow: hidden; }
+#loading-bar { height: 100%; width: 0%; background: #fff; transition: width 0.25s ease; }
 /* logotype (assets/logo.png: black ink on transparent, inverted at night) */
 .brand-logo { display: block; width: 168px; height: auto; user-select: none; -webkit-user-drag: none; }
-.brand-logo.large { width: 240px; margin: 0 auto 10px; }
+.brand-logo.large { width: 100%; margin: 0 auto 24px; filter: invert(1) brightness(0.98) drop-shadow(0 8px 28px rgba(0,0,0,0.55)); }
 
 /* top bar */
 #topbar { position: fixed; top: 14px; left: 14px; right: 14px; z-index: 20; display: flex; align-items: flex-start; gap: 14px; pointer-events: none; }

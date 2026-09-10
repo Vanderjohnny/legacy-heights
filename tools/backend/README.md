@@ -20,6 +20,7 @@ Passwords are **script properties** of the Apps Script project: they are never w
    |--------------------|-----------------------------------------------------------------------|
    | `RESERVE_PASSWORD` | the sales password: reserve, mark as sold, release                    |
    | `ADMIN_PASSWORD`   | optional: a separate password for sold / release (defaults to the one above) |
+   | `PHASES_PASSWORD`  | optional: password that reveals the phases under construction on the site (defaults to the one above) |
    | `SALES_EMAIL`      | who receives the "I'm interested" leads, e.g. `sales@unk.group`       |
    | `NOTIFY_EMAILS`    | optional: comma-separated addresses notified of every status change   |
    | `SITE_URL`         | optional: public site URL, used by `importRegistry` (pre-fills lots)  |
@@ -39,6 +40,8 @@ After changing `Code.gs` later: **Deploy → Manage deployments → edit → ver
   Two people reserving the same property at the same time: the script lock serialises the requests, the second one
   gets `not-available` and the site refreshes its statuses.
 * `sold` needs the admin password (from AVAILABLE or RESERVED). `release` (admin) puts a property back to AVAILABLE.
+* `unlock` checks a password and answers `ok`: the site shows only phase A until it is accepted (the other phases
+  are "under construction"). Deployments without this action are probed with a `release` on an impossible property id.
 * `interest` stores the lead in the `Leads` sheet and e-mails `SALES_EMAIL` (reply-to = the visitor). It never
   changes a status.
 * 8 wrong passwords within 10 minutes block further attempts for 10 minutes (`throttled`); leads are capped at 40/hour.

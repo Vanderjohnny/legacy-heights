@@ -31,6 +31,13 @@ class Backend:
         if password and password == RESERVE_PW: return 'sales'
         return None
 
+    def unlock(self, body):
+        if time.time() - self.failed_at > 600: self.failed = 0
+        if self.failed >= MAX_FAILED_LOGINS: return {'error': 'throttled'}
+        if self.role(str(body.get('password', ''))) is None:
+            self.failed += 1; self.failed_at = time.time(); return {'error': 'unauthorized'}
+        return {'ok': True}
+
     def public(self):
         return {pid: s for pid, s in self.statuses.items() if s['status'] != 'available'}
 
@@ -121,6 +128,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         action = str(body.get('action', ''))
         if action == 'interest': return self._json(BACKEND.interest(body.get('lead') or {}))
         if action in ('reserve', 'sold', 'release'): return self._json(BACKEND.change(action, body))
+        if action == 'unlock': return self._json(BACKEND.unlock(body))
         return self._json({'error': 'unknown-action'})
 
     def do_OPTIONS(self):

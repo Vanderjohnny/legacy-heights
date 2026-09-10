@@ -15,13 +15,13 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // internal modules carry a version query so browsers never pair a new main.js with a cached old module
-import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW } from './config.js?v=20';
-import { api } from './api.js?v=20';
-import { createNight } from './night.js?v=20';
-import { createCars } from './cars.js?v=20';
-import { createRegionMap } from './region.js?v=20';
-import { createPois } from './poi.js?v=20';
-import { createPlanes } from './planes.js?v=20';
+import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW, OPEN_PARCELS } from './config.js?v=21';
+import { api } from './api.js?v=21';
+import { createNight } from './night.js?v=21';
+import { createCars } from './cars.js?v=21';
+import { createRegionMap } from './region.js?v=21';
+import { createPois } from './poi.js?v=21';
+import { createPlanes } from './planes.js?v=21';
 
 const THREE_VERSION = '0.170.0';
 const ASSET_V = '2026-09-10m';   // bump when models/textures change so browsers do not keep stale copies
@@ -46,6 +46,7 @@ const DRACO_PATH = `https://cdn.jsdelivr.net/npm/three@${THREE_VERSION}/examples
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
+const PHASES_UNLOCKED = (() => { try { return sessionStorage.getItem('lh-phases') === '1'; } catch { return false; } })();
 const state = {
   lang: 'en',           // English only on the public site (the PT strings stay in config.js; no toggle in the UI)
   data: null,
@@ -55,7 +56,8 @@ const state = {
   hovered: null,        // house record or lot record
   selected: null,
   activeTypes: new Set([1, 2, 3, 4]),
-  activeParcels: new Set(PARCELS),
+  activeParcels: new Set(PHASES_UNLOCKED ? PARCELS : OPEN_PARCELS),
+  unlocked: PHASES_UNLOCKED,   // the phases under construction need the access password (checked server-side)
   activeStatuses: new Set(['available', 'reserved', 'sold']),
   byPhase: false,
   colorByType: false,
@@ -65,6 +67,7 @@ const state = {
   night: false,
 };
 const t = (k) => I18N[state.lang][k] ?? I18N.en[k] ?? k;
+const isLockedParcel = (p) => !state.unlocked && !OPEN_PARCELS.includes(p);
 const fmt = (n, d = 0) => (n == null || Number.isNaN(n)) ? '–' : n.toLocaleString(state.lang === 'pt' ? 'pt-BR' : 'en-US', { maximumFractionDigits: d, minimumFractionDigits: d });
 
 // ---------------------------------------------------------------------------
@@ -802,7 +805,7 @@ function setupCurbs(root) {
 // Two detail levels per model: "hi" = every primitive, "lo" = only the large primitives (walls, roof, glass, doors).
 // Instances are re-distributed between the two sets as the camera moves (see rebuildInstances).
 const models = {};           // modelIdx -> { houses, hi: [{im,isFacade}], lo: [{im,isFacade}] }
-let LOD_DIST = IS_TOUCH ? 900 : 3000;  // metres: houses closer than this get the detailed mesh (~3k triangles each, 1.7 M for all 605);
+let LOD_DIST = IS_TOUCH ? 800 : 1000;  // metres: houses closer than this get the detailed mesh (~3k triangles each, 1.7 M for all 605);
                                        // the 24-triangle boxes only far away (the user wants complete houses everywhere near the camera)
 function setupHouseModel(modelIdx, root, meta) {
   const houses = state.houses.filter((h) => h.model === modelIdx);
@@ -1176,7 +1179,7 @@ function tooltipHtml(o) {
   if (o.isHouse) {
     const ty = TYPES[o.type], st = statusOf(o);
     const twin = o.house && o.house.units.length > 1 ? o.house.units.find((u) => u !== o) : null;
-    return `<b>${t('lot')} ${o.code}</b> · <span class="dot" style="background:${STATUS[st].hex}"></span>${STATUS[st].label[state.lang]}${twin ? ` <span class="muted">· ${t('twin')} ${twin.code}</span>` : ''}<br><span class="dot" style="background:${ty.hex}"></span>${ty.label[state.lang]} · ${o.prop?.planName || ''} · ${ty.beds} ${t('beds')} · ${ty.baths} ${t('baths')}${ty.units > 1 ? ` (${t('perUnit')})` : ''}<br><span class="muted">${t('parcel')} ${o.parcel} · ${fmt(o.lotArea * SQFT_PER_M2)} ${t('sqft')} · ${fmt(o.lotArea)} ${t('sqm')}</span>`;
+    return `<b>${t('lot')} ${o.code}</b> · <span class="dot" style="background:${STATUS[st].hex}"></span>${STATUS[st].label[state.lang]}${twin ? ` <span class="muted">· ${t('twin')} ${twin.code}</span>` : ''}<br><span class="dot" style="background:${ty.hex}"></span>${ty.label[state.lang]} · ${ty.beds} ${t('beds')} · ${ty.baths} ${t('baths')}${ty.units > 1 ? ` (${t('perUnit')})` : ''}<br><span class="muted">${t('parcel')} ${o.parcel} · ${fmt(o.lotArea * SQFT_PER_M2)} ${t('sqft')} · ${fmt(o.lotArea)} ${t('sqm')}</span>`;
   }
   return `<b>${t('lot')} ${o.name}</b><br><span class="muted">${o.hidden ? t('openSpace') : t('freeLot')} · ${fmt(o.area_m2 * SQFT_PER_M2)} ${t('sqft')} · ${fmt(o.area_m2)} ${t('sqm')}</span>`;
 }
@@ -1346,7 +1349,9 @@ function setupUI() {
     if (!id) return;
     results.classList.remove('show'); search.value = '';
     const h = state.unitByPid.get(id);
-    if (h) { state.activeTypes.add(h.type); state.activeParcels.add(h.parcel); state.activeStatuses.add(statusOf(h)); applyFilter(); buildLegend(); select(h, true); }
+    if (!h) return;
+    if (isLockedParcel(h.parcel)) { openUnlock(h.parcel, h); return; }
+    state.activeTypes.add(h.type); state.activeParcels.add(h.parcel); state.activeStatuses.add(statusOf(h)); applyFilter(); buildLegend(); select(h, true);
   });
   // property panel v2: lightbox, sheet toggle, sales actions
   $('panel-expand').onclick = () => $('panel').classList.toggle('expanded');
@@ -1406,10 +1411,11 @@ function buildLegend() {
   const perParcel = {};
   state.houses.forEach((h) => { perParcel[h.parcel] = (perParcel[h.parcel] || 0) + 1; });
   const pel = $('parcel-items');
-  pel.innerHTML = PARCELS.map((p) => `<button class="pchip ${state.activeParcels.has(p) ? '' : 'off'}" data-parcel="${p}">${p}<small>${perParcel[p] || 0}</small></button>`).join('');
+  pel.innerHTML = PARCELS.map((p) => `<button class="pchip ${state.activeParcels.has(p) ? '' : 'off'}${isLockedParcel(p) ? ' locked' : ''}" data-parcel="${p}" title="${isLockedParcel(p) ? t('lockedHint') : ''}">${p}<small>${perParcel[p] || 0}</small></button>`).join('');
   pel.querySelectorAll('.pchip').forEach((b) => {
     b.onclick = (ev) => {
       const p = b.dataset.parcel;
+      if (isLockedParcel(p)) { openUnlock(p); return; }
       if (ev.shiftKey || ev.altKey) state.activeParcels = new Set([p]);
       else if (state.activeParcels.has(p)) { if (state.activeParcels.size > 1) state.activeParcels.delete(p); }
       else state.activeParcels.add(p);
@@ -1471,11 +1477,9 @@ function renderPanel(h) {
   $('panel-img').src = imageUrl(`assets/img/house_${img.index}.jpg`);
   $('panel-img').alt = `${ty.label[state.lang]} — ${imgColor}`;
   $('panel-imgnote').textContent = img.exact ? t('imgExact') : `${t('imgNote')} ${imgColor}`;
-  $('panel-title').textContent = `${t('lot')} ${h.code}`;
+  $('panel-title').textContent = `${t('lot')} ${h.code}${prop.planName ? ` · ${prop.planName}` : ''}`;
   const badge = $('panel-status'); badge.className = `status-badge ${st}`; badge.textContent = STATUS[st].label[state.lang];
-  $('panel-sub').innerHTML = `${prop.planName ? `<b>${prop.planName}</b> · ` : ''}<span class="dot" style="background:${ty.hex}"></span>${ty.label[state.lang]} · ${t('parcel')} ${h.parcel}${prop.parcelInferred ? ` <span class="inferred-note">(${t('inferred')})</span>` : ''}`;
-  $('panel-pid').textContent = h.pid || h.id;
-  $('panel-updated').textContent = sinfo.updatedAt ? ` · ${t('lastUpdate')} ${new Date(sinfo.updatedAt).toLocaleDateString(state.lang === 'pt' ? 'pt-BR' : 'en-GB')}` : '';
+  $('panel-sub').innerHTML = `${t('phase')} ${h.parcel}${prop.parcelInferred ? ` <span class="inferred-note">(${t('inferred')})</span>` : ''}${sinfo.updatedAt ? ` · ${t('lastUpdate')} ${new Date(sinfo.updatedAt).toLocaleDateString(state.lang === 'pt' ? 'pt-BR' : 'en-GB')}` : ''}`;
   $('panel-body').innerHTML = `
     <div class="facts">
       <div class="fact"><span class="k">${t('houseModel')}</span><span class="v">${prop.planName || '–'} <em>${state.lang === 'pt' ? 'Opção' : 'Option'} ${state.registry?.plans?.[h.type]?.option ?? '–'} · ${h.kind === 'duplex' ? 'Duplex' : (state.lang === 'pt' ? 'Casa isolada' : 'Single house')}</em></span></div>
@@ -1485,9 +1489,7 @@ function renderPanel(h) {
       <div class="fact"><span class="k">${t('lotArea')}${h.lots.length > 1 ? ` <small>(${h.lots.length} ${t('lots')})</small>` : ''}</span><span class="v">${fmt(h.lotArea == null ? null : h.lotArea * SQFT_PER_M2)} ${t('sqft')} <em>${fmt(h.lotArea, 1)} ${t('sqm')}</em></span></div>
       <div class="fact"><span class="k">${t('facade')}</span><span class="v"><span class="swatch" style="background:${swatch}"></span>${COLOR_LABEL[h.color] || h.color}</span></div>
       ${twin ? `<div class="fact wide"><span class="k">${t('twin')}</span><span class="v"><a href="#" id="panel-twin">${t('lot')} ${twin.code}</a> <em><span class="dot" style="background:${STATUS[statusOf(twin)].hex}"></span>${STATUS[statusOf(twin)].label[state.lang]} · ${t('unit')} ${h.index === 0 ? 'A' : 'B'}</em></span></div>` : ''}
-      <div class="fact wide"><span class="k">${t('model')}</span><span class="v">${h.id} · Casa ${h.model} · ${t('lot')} ${h.lotIndex.split(' ').join(' + ')}${h.prevLot ? ` <em>${state.lang === 'pt' ? 'lote anterior' : 'previous lot'}: ${h.prevLot.replace(/\D+/g, '')}</em>` : ''}</span></div>
-    </div>
-    <p class="source">${t('source')}</p>`;
+    </div>`;
   if (twin) $('panel-twin').onclick = (ev) => { ev.preventDefault(); select(twin, false); };
   const plan = prop.plan || state.registry?.plans?.[h.type]?.file;
   $('panel-plan').src = plan ? imageUrl(`assets/plans/${plan}`) : '';
@@ -1510,6 +1512,35 @@ let toastTimer = null;
 function toast(msg, ms = 3200) {
   const el = $('toast'); el.textContent = msg; el.classList.add('show');
   clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+}
+// phases under construction: the chips are locked until the access password is accepted by the backend
+function openUnlock(parcel, pending = null) {
+  openModal(`
+    <h2>${t('phase')} ${esc(parcel)} · ${t('underConstruction')}</h2>
+    <p class="intro">${t('unlockIntro')}</p>
+    <form id="unlock-form">
+      <div class="field"><label for="unlock-pw">${t('password')}</label><input id="unlock-pw" name="password" type="password" required autocomplete="off" /></div>
+      <div class="form-msg" id="unlock-msg"></div>
+      <div class="modal-actions"><button type="button" class="btn ghost" id="unlock-cancel">${t('cancel')}</button><button type="submit" class="btn primary" id="unlock-ok">${t('unlock')}</button></div>
+    </form>`);
+  $('unlock-cancel').onclick = closeModal;
+  $('unlock-form').onsubmit = async (ev) => {
+    ev.preventDefault();
+    const pw = new FormData(ev.target).get('password'); const out = $('unlock-msg'); const btn = $('unlock-ok');
+    btn.disabled = true; btn.textContent = t('checking'); out.className = 'form-msg'; out.textContent = '';
+    try {
+      await api.unlock(pw);
+      state.unlocked = true;
+      try { sessionStorage.setItem('lh-phases', '1'); } catch { /* private mode */ }
+      state.activeParcels = new Set(PARCELS);
+      if (pending) { state.activeTypes.add(pending.type); state.activeStatuses.add(statusOf(pending)); }
+      applyFilter(); buildLegend(); closeModal(); toast(t('unlocked'));
+      if (pending) select(pending, true);
+    } catch (e) {
+      const msg = e.message === 'unauthorized' ? t('wrongPassword') : e.message === 'throttled' ? t('throttled') : e.message === 'no-backend' ? t('readOnly') : t('networkError');
+      out.className = 'form-msg err'; out.textContent = msg; btn.disabled = false; btn.textContent = t('unlock');
+    }
+  };
 }
 function openModal(html) { $('modal-content').innerHTML = html; $('modal').hidden = false; const f = $('modal').querySelector('input, textarea'); if (f) setTimeout(() => f.focus(), 50); }
 function closeModal() { $('modal').hidden = true; $('modal-content').innerHTML = ''; }
@@ -1625,11 +1656,11 @@ function closeRegionMap() {
 }
 function handleHash() {
   const p = location.hash.match(/p-([0-9a-f]{8,}(?:-[12])?)/i);
-  if (p) { const h = state.unitByPid.get(`LH_${p[1]}`); if (h) { select(h, true); return; } }
+  if (p) { const h = state.unitByPid.get(`LH_${p[1]}`); if (h) { if (isLockedParcel(h.parcel)) openUnlock(h.parcel, h); else select(h, true); return; } }
   const m = location.hash.match(/casa-(\d+)/);
   if (!m) return;
   const h = state.byId.get(`Casa ${m[1].padStart(3, '0')}`);
-  if (h) select(h.units[0], true);
+  if (h) { if (isLockedParcel(h.parcel)) openUnlock(h.parcel, h.units[0]); else select(h.units[0], true); }
 }
 
 // ---------------------------------------------------------------------------
@@ -1671,4 +1702,5 @@ window.__app = { setLod: (d) => { LOD_DIST = d; rebuildInstances(true); return L
 init().catch((err) => {
   console.error(err);
   document.getElementById('loading-text').textContent = `Error: ${err.message}`;
+  document.getElementById('loading-text').hidden = false;
 });

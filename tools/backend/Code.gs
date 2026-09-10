@@ -37,6 +37,7 @@ function doPost(e) {
   try {
     if (action === 'interest') return json_(handleInterest_(body.lead || {}));
     if (action === 'reserve' || action === 'sold' || action === 'release') return json_(handleStatusChange_(action, body));
+    if (action === 'unlock') return json_(handleUnlock_(body));
     return json_({ error: 'unknown-action' });
   } catch (err) {
     console.error(err);
@@ -96,6 +97,19 @@ function handleStatusChange_(action, body) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// Phases gate of the site: the password reveals the phases still under construction. Nothing is written.
+// PHASES_PASSWORD (script property) may hold a separate password; by default the sales password is accepted.
+function handleUnlock_(body) {
+  var cache = CacheService.getScriptCache(), failKey = 'failed-logins';
+  var failed = Number(cache.get(failKey) || 0);
+  if (failed >= MAX_FAILED_LOGINS) return { error: 'throttled' };
+  var password = String(body.password || '');
+  var phases = PropertiesService.getScriptProperties().getProperty('PHASES_PASSWORD');
+  var ok = phases ? (password && safeEqual_(password, phases)) : !!checkPassword_(password);
+  if (!ok) { cache.put(failKey, String(failed + 1), 600); return { error: 'unauthorized' }; }
+  return { ok: true };
 }
 
 // Passwords live in the script properties (Project settings > Script properties). Never in this code, never in the site.
