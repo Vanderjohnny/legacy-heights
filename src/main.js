@@ -15,16 +15,16 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // internal modules carry a version query so browsers never pair a new main.js with a cached old module
-import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW } from './config.js?v=15';
-import { api } from './api.js?v=15';
-import { createNight } from './night.js?v=15';
-import { createCars } from './cars.js?v=15';
-import { createRegionMap } from './region.js?v=15';
-import { createPois } from './poi.js?v=15';
-import { createPlanes } from './planes.js?v=15';
+import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW } from './config.js?v=16';
+import { api } from './api.js?v=16';
+import { createNight } from './night.js?v=16';
+import { createCars } from './cars.js?v=16';
+import { createRegionMap } from './region.js?v=16';
+import { createPois } from './poi.js?v=16';
+import { createPlanes } from './planes.js?v=16';
 
 const THREE_VERSION = '0.170.0';
-const ASSET_V = '2026-09-10j';   // bump when models/textures change so browsers do not keep stale copies
+const ASSET_V = '2026-09-10k';   // bump when models/textures change so browsers do not keep stale copies
 const asset = (url) => `${url}${url.includes('?') ? '&' : '?'}v=${ASSET_V}`;
 // Single-file build (tools/build_single_html.py): every asset is embedded as base64 in window.LH_EMBED and nothing is fetched.
 const EMBED = window.LH_EMBED || null;
@@ -322,7 +322,63 @@ async function refreshStatuses() {
     if (state.selected) renderPanel(state.selected);
   } catch (e) { console.warn('status refresh failed', e); }
 }
-const statusOf = (h) => (state.status[h.pid]?.status || 'available');
+const statusOf = (u) => (state.status[u.pid]?.status || 'available');
+
+// ---------------------------------------------------------------------------
+// Units: what is sold. A single house is one unit; a semi-detached (duplex) body holds two units, one per side.
+// Two-lot duplexes use their two lots; single-lot duplexes split the lot along the party wall (the body's local X = 0).
+// Unit ids: <house pid> for singles, <house pid>-1 / -2 for the two sides (stable, used by the sales backend).
+// ---------------------------------------------------------------------------
+function clipPoly(poly, ox, oy, nx, ny, keepPositive) {   // Sutherland-Hodgman against the line through (ox, oy) with normal (nx, ny)
+  const out = [], n = poly.length, side = (q) => (q[0] - ox) * nx + (q[1] - oy) * ny;
+  for (let i = 0; i < n; i++) {
+    const a = poly[i], b = poly[(i + 1) % n], sa = side(a), sb = side(b);
+    const ina = keepPositive ? sa >= 0 : sa <= 0, inb = keepPositive ? sb >= 0 : sb <= 0;
+    if (ina) out.push(a);
+    if (ina !== inb) { const k = sa / (sa - sb); out.push([a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k]); }
+  }
+  return out;
+}
+function polyArea(poly) { let a = 0; for (let i = 0; i < poly.length; i++) { const p = poly[i], q = poly[(i + 1) % poly.length]; a += p[0] * q[1] - q[0] * p[1]; } return Math.abs(a) / 2; }
+function makeUnit(h, k, code, polys, area, lot, sideSign) {
+  return { isUnit: true, isHouse: true, house: h, index: k, pid: k >= 0 ? `${h.pid}-${k + 1}` : h.pid, code, lotPolys: polys, lotArea: area, lot, sideSign,
+    type: h.type, kind: h.kind, parcel: h.parcel, model: h.model, num: h.num, id: h.id, prop: h.prop, color: h.color, pos: h.pos, matrix: h.matrix, prevLot: h.prevLot, lots: h.lots, lotIndex: h.lotIndex, lotNum: h.lotNum };
+}
+function buildUnits() {
+  state.units = []; state.unitsByLot = new Map();
+  for (const h of state.houses) {
+    const rz = THREE.MathUtils.degToRad(h.rot[2]), nx = Math.cos(rz), ny = Math.sin(rz);   // the body's local +X in Blender XY
+    h.axis = [nx, ny];
+    let units;
+    if (h.kind !== 'duplex') units = [makeUnit(h, -1, h.code, h.lotPolys, h.lotArea, h.lots[0], 0)];
+    else if (h.lots.length >= 2) {
+      const two = h.lots.slice(0, 2).map((l) => ({ l, s: (l.center[0] - h.pos[0]) * nx + (l.center[1] - h.pos[1]) * ny }));
+      two.sort((a, b) => a.s - b.s);
+      units = two.map((e, k) => makeUnit(h, k, e.l.name, [e.l.poly], e.l.area_m2, e.l, k === 0 ? -1 : 1));
+    } else {
+      const lot = h.lots[0], base = lot ? lot.poly : null;
+      const polyA = base ? clipPoly(base, h.pos[0], h.pos[1], nx, ny, false) : [], polyB = base ? clipPoly(base, h.pos[0], h.pos[1], nx, ny, true) : [];
+      units = [
+        makeUnit(h, 0, `${h.code} A`, polyA.length >= 3 ? [polyA] : h.lotPolys, polyA.length >= 3 ? polyArea(polyA) : (h.lotArea || 0) / 2, lot, -1),
+        makeUnit(h, 1, `${h.code} B`, polyB.length >= 3 ? [polyB] : h.lotPolys, polyB.length >= 3 ? polyArea(polyB) : (h.lotArea || 0) / 2, lot, 1),
+      ];
+    }
+    h.units = units;
+    for (const u of units) { state.units.push(u); if (u.lot) { const arr = state.unitsByLot.get(u.lot.id) || []; arr.push(u); state.unitsByLot.set(u.lot.id, arr); } }
+  }
+  state.unitByPid = new Map(state.units.map((u) => [u.pid, u]));
+}
+// the unit under a point (Blender XY) of a house: the side of the party wall the point falls on
+function unitOfHouseAt(h, x, y) {
+  if (!h.units || h.units.length === 1) return h.units ? h.units[0] : null;
+  const sgn = (x - h.pos[0]) * h.axis[0] + (y - h.pos[1]) * h.axis[1] < 0 ? -1 : 1;
+  return h.units.find((u) => u.sideSign === sgn) || h.units[0];
+}
+function unitAt(x, y) {
+  const lot = lotAt(x, y); if (!lot) return null;
+  const list = state.unitsByLot.get(lot.id); if (!list || !list.length) return null;
+  return list.length === 1 ? list[0] : unitOfHouseAt(list[0].house, x, y);
+}
 
 function prepareData(data) {
   const lotsById = data.lots;
@@ -365,6 +421,7 @@ function prepareData(data) {
   });
   state.byId = new Map(state.houses.map((h) => [h.id, h]));
   state.lotByHouse = new Map();
+  buildUnits();
   state.houses.forEach((h) => h.lotIds.forEach((id) => state.lotByHouse.set(id, h)));
 }
 
@@ -855,7 +912,7 @@ function rebuildInstances(force = false) {
 }
 function refreshFacadeColors() { rebuildInstances(true); }
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
-const isVisibleHouse = (h) => state.activeTypes.has(h.type) && state.activeParcels.has(h.parcel) && state.activeStatuses.has(statusOf(h));
+const isVisibleHouse = (h) => state.activeTypes.has(h.type) && state.activeParcels.has(h.parcel) && (h.house ? state.activeStatuses.has(statusOf(h)) : (h.units || [h]).some((u) => state.activeStatuses.has(statusOf(u))));
 function applyFilter() {
   const visible = isVisibleHouse;
   for (const im of proxies) {
@@ -1088,15 +1145,15 @@ function pick(ev) {
   if (hits.length) {
     const im = hits[0].object;
     const h = im.userData.houses[hits[0].instanceId];
-    if (h && isVisibleHouse(h)) return h;
+    if (h && isVisibleHouse(h)) { const u = unitOfHouseAt(h, hits[0].point.x, -hits[0].point.z); if (u && isVisibleHouse(u)) return u; }
   }
   const g = raycaster.intersectObject(pickPlane, false);
   if (g.length) {
     const p = g[0].point;
     const lot = lotAt(p.x, -p.z);
     if (lot) {
-      const h = state.lotByHouse.get(lot.id);
-      if (h && isVisibleHouse(h)) return h;
+      const u = unitAt(p.x, -p.z);
+      if (u && isVisibleHouse(u)) return u;
       if (lot.park) return null;                       // parks: nothing to select, no tooltip
       if (!lot.hasHouse && lot.area_m2 > 60) return lot;
     }
@@ -1117,7 +1174,8 @@ function setHover(obj, ev) {
 function tooltipHtml(o) {
   if (o.isHouse) {
     const ty = TYPES[o.type], st = statusOf(o);
-    return `<b>${t('lot')} ${o.code}</b> · <span class="dot" style="background:${STATUS[st].hex}"></span>${STATUS[st].label[state.lang]}<br><span class="dot" style="background:${ty.hex}"></span>${ty.label[state.lang]} · ${o.prop?.planName || ''} · ${ty.beds} ${t('beds')} · ${ty.baths} ${t('baths')}${ty.units > 1 ? ` (${t('perUnit')})` : ''}<br><span class="muted">${t('parcel')} ${o.parcel} · ${fmt(o.lotArea * SQFT_PER_M2)} ${t('sqft')} · ${fmt(o.lotArea)} ${t('sqm')}</span>`;
+    const twin = o.house && o.house.units.length > 1 ? o.house.units.find((u) => u !== o) : null;
+    return `<b>${t('lot')} ${o.code}</b> · <span class="dot" style="background:${STATUS[st].hex}"></span>${STATUS[st].label[state.lang]}${twin ? ` <span class="muted">· ${t('twin')} ${twin.code}</span>` : ''}<br><span class="dot" style="background:${ty.hex}"></span>${ty.label[state.lang]} · ${o.prop?.planName || ''} · ${ty.beds} ${t('beds')} · ${ty.baths} ${t('baths')}${ty.units > 1 ? ` (${t('perUnit')})` : ''}<br><span class="muted">${t('parcel')} ${o.parcel} · ${fmt(o.lotArea * SQFT_PER_M2)} ${t('sqft')} · ${fmt(o.lotArea)} ${t('sqm')}</span>`;
   }
   return `<b>${t('lot')} ${o.name}</b><br><span class="muted">${o.hidden ? t('openSpace') : t('freeLot')} · ${fmt(o.area_m2 * SQFT_PER_M2)} ${t('sqft')} · ${fmt(o.area_m2)} ${t('sqm')}</span>`;
 }
@@ -1158,7 +1216,7 @@ function select(h, fly = true) {
 let statusLines = null;
 function buildStatusLines() {
   const pos = [], col = [];
-  for (const h of state.houses) {
+  for (const h of state.units) {
     const st = statusOf(h);
     if (st === 'available' || !isVisibleHouse(h)) continue;
     const c = new THREE.Color(STATUS[st].hex);
@@ -1278,16 +1336,16 @@ function setupUI() {
     const q = search.value.trim().toLowerCase().replace(/^(casa|house|lot|lote|terrenos?)\s*/, '').replace(/\s+/g, '');
     results.innerHTML = '';
     if (!q) { results.classList.remove('show'); return; }
-    const found = state.houses.filter((h) => h.num.includes(q) || h.code.toLowerCase().replace(/\s+/g, '').includes(q) || h.lotNum.toLowerCase().replace(/\s+/g, '').includes(q) || h.lotIndex.includes(q) || h.num === q.padStart(3, '0') || (h.pid && h.pid.toLowerCase().includes(q))).slice(0, 8);
-    results.innerHTML = found.length ? found.map((h) => `<div data-id="${h.id}"><b>${t('lot')} ${h.code}</b> · ${t('house')} ${h.num} <span class="dot" style="background:${TYPES[h.type].hex}"></span>${TYPES[h.type].label[state.lang]} <span class="dot" style="background:${STATUS[statusOf(h)].hex}"></span></div>`).join('') : `<div class="muted">${t('noResults')}</div>`;
+    const found = state.units.filter((h) => h.num.includes(q) || h.code.toLowerCase().replace(/\s+/g, '').includes(q) || h.lotNum.toLowerCase().replace(/\s+/g, '').includes(q) || h.lotIndex.includes(q) || h.num === q.padStart(3, '0') || (h.pid && h.pid.toLowerCase().includes(q))).slice(0, 8);
+    results.innerHTML = found.length ? found.map((h) => `<div data-id="${h.pid}"><b>${t('lot')} ${h.code}</b> · ${t('house')} ${h.num} <span class="dot" style="background:${TYPES[h.type].hex}"></span>${TYPES[h.type].label[state.lang]} <span class="dot" style="background:${STATUS[statusOf(h)].hex}"></span></div>`).join('') : `<div class="muted">${t('noResults')}</div>`;
     results.classList.add('show');
   });
   results.addEventListener('click', (ev) => {
     const id = ev.target.closest('[data-id]')?.dataset.id;
     if (!id) return;
     results.classList.remove('show'); search.value = '';
-    const h = state.byId.get(id);
-    if (h) { state.activeTypes.add(h.type); state.activeParcels.add(h.parcel); applyFilter(); buildLegend(); select(h, true); }
+    const h = state.unitByPid.get(id);
+    if (h) { state.activeTypes.add(h.type); state.activeParcels.add(h.parcel); state.activeStatuses.add(statusOf(h)); applyFilter(); buildLegend(); select(h, true); }
   });
   // property panel v2: lightbox, sheet toggle, sales actions
   $('panel-expand').onclick = () => $('panel').classList.toggle('expanded');
@@ -1319,7 +1377,7 @@ function setupUI() {
 }
 function step(dir) {
   if (!state.selected) return;
-  const list = state.houses.filter(isVisibleHouse);
+  const list = state.units.filter(isVisibleHouse);
   const i = list.indexOf(state.selected);
   const next = list[(i + dir + list.length) % list.length];
   select(next, true);
@@ -1361,7 +1419,7 @@ function buildLegend() {
   // status legend: chips toggle the statuses shown; "by phase" opens the breakdown per parcel
   const perStatus = { available: 0, reserved: 0, sold: 0 };
   const perPhase = {};
-  state.houses.forEach((h) => { const st = statusOf(h); perStatus[st]++; (perPhase[h.parcel] = perPhase[h.parcel] || { available: 0, reserved: 0, sold: 0 })[st]++; });
+  state.units.forEach((h) => { const st = statusOf(h); perStatus[st]++; (perPhase[h.parcel] = perPhase[h.parcel] || { available: 0, reserved: 0, sold: 0 })[st]++; });
   $('status-items').innerHTML = Object.entries(STATUS).map(([k, s]) => `<button class="schip ${state.activeStatuses.has(k) ? '' : 'off'}" data-status="${k}" title="${t('statusHint')}"><span class="dot" style="background:${s.hex}"></span>${s.label[state.lang]} <b>${perStatus[k]}</b></button>`).join('')
     + `<button class="schip toggle ${state.byPhase ? 'on' : ''}" id="status-by-phase-btn">${t('byPhase')} ${state.byPhase ? '▴' : '▾'}</button>`;
   $('status-items').querySelectorAll('.schip[data-status]').forEach((b) => {
@@ -1381,7 +1439,7 @@ function buildLegend() {
     + PARCELS.filter((k) => perPhase[k]).map((k) => `<div class="sbp-row ${state.activeParcels.has(k) ? '' : 'off'}"><span><b>${k}</b></span><span>${perPhase[k].available}</span><span>${perPhase[k].reserved}</span><span>${perPhase[k].sold}</span></div>`).join('') : '';
 }
 function updateCounter() {
-  const n = state.houses.filter(isVisibleHouse).length;
+  const n = state.units.filter(isVisibleHouse).length;
   $('count-houses').textContent = fmt(n);
   $('count-lots').textContent = fmt(state.lots.filter((l) => !l.park && l.area_m2 > 60).length);
 }
@@ -1408,6 +1466,7 @@ function renderPanel(h) {
   const per = ty.units > 1 ? ` <small>(${t('perUnit')})</small>` : '';
   const st = statusOf(h), sinfo = state.status[h.pid] || {};
   const prop = h.prop || {};
+  const twin = h.house && h.house.units.length > 1 ? h.house.units.find((u) => u !== h) : null;
   $('panel-img').src = imageUrl(`assets/img/house_${img.index}.jpg`);
   $('panel-img').alt = `${ty.label[state.lang]} — ${imgColor}`;
   $('panel-imgnote').textContent = img.exact ? t('imgExact') : `${t('imgNote')} ${imgColor}`;
@@ -1424,9 +1483,11 @@ function renderPanel(h) {
       <div class="fact"><span class="k">${t('roof')}${per}</span><span class="v">${fmt(roof)} ${t('sqft')} <em>${fmt(roof / SQFT_PER_M2, 1)} ${t('sqm')}</em></span></div>
       <div class="fact"><span class="k">${t('lotArea')}${h.lots.length > 1 ? ` <small>(${h.lots.length} ${t('lots')})</small>` : ''}</span><span class="v">${fmt(h.lotArea == null ? null : h.lotArea * SQFT_PER_M2)} ${t('sqft')} <em>${fmt(h.lotArea, 1)} ${t('sqm')}</em></span></div>
       <div class="fact"><span class="k">${t('facade')}</span><span class="v"><span class="swatch" style="background:${swatch}"></span>${COLOR_LABEL[h.color] || h.color}</span></div>
+      ${twin ? `<div class="fact wide"><span class="k">${t('twin')}</span><span class="v"><a href="#" id="panel-twin">${t('lot')} ${twin.code}</a> <em><span class="dot" style="background:${STATUS[statusOf(twin)].hex}"></span>${STATUS[statusOf(twin)].label[state.lang]} · ${t('unit')} ${h.index === 0 ? 'A' : 'B'}</em></span></div>` : ''}
       <div class="fact wide"><span class="k">${t('model')}</span><span class="v">${h.id} · Casa ${h.model} · ${t('lot')} ${h.lotIndex.split(' ').join(' + ')}${h.prevLot ? ` <em>${state.lang === 'pt' ? 'lote anterior' : 'previous lot'}: ${h.prevLot.replace(/\D+/g, '')}</em>` : ''}</span></div>
     </div>
     <p class="source">${t('source')}</p>`;
+  if (twin) $('panel-twin').onclick = (ev) => { ev.preventDefault(); select(twin, false); };
   const plan = prop.plan || state.registry?.plans?.[h.type]?.file;
   $('panel-plan').src = plan ? imageUrl(`assets/plans/${plan}`) : '';
   $('panel-plan-name').textContent = plan ? `${prop.planName || ''} · ${ty.beds} ${t('beds')} · ${ty.baths} ${t('baths')}${ty.units > 1 ? ` · ${t('perUnit')}` : ''}` : '';
@@ -1562,12 +1623,12 @@ function closeRegionMap() {
   if (pois && pois.selected) pois.select(pois.selected, true, false);
 }
 function handleHash() {
-  const p = location.hash.match(/p-([0-9a-f]{8,})/i);
-  if (p) { const h = state.houses.find((x) => x.pid === `LH_${p[1]}`); if (h) { select(h, true); return; } }
+  const p = location.hash.match(/p-([0-9a-f]{8,}(?:-[12])?)/i);
+  if (p) { const h = state.unitByPid.get(`LH_${p[1]}`); if (h) { select(h, true); return; } }
   const m = location.hash.match(/casa-(\d+)/);
   if (!m) return;
   const h = state.byId.get(`Casa ${m[1].padStart(3, '0')}`);
-  if (h) select(h, true);
+  if (h) select(h.units[0], true);
 }
 
 // ---------------------------------------------------------------------------
@@ -1604,7 +1665,7 @@ window.addEventListener('resize', () => {
   if (pois) pois.resize();
 });
 
-window.__app = { scene, camera, renderer, controls, state, houseGroups, proxies, modelInfo, select, flyTo, setOverview, SUN_DIR, MATS, setNight, setTime: (tt) => night && night.setTime(tt), openRegionMap, get night() { return night; }, get cars() { return cars; }, get regionMap() { return regionMap; }, get pois() { return pois; }, get planes() { return planes; }, get csm() { return csm; }, get composer() { return composer; }, get gtao() { return gtao; } };
+window.__app = { scene, camera, renderer, controls, state, unitAt, unitOfHouseAt, houseGroups, proxies, modelInfo, select, flyTo, setOverview, SUN_DIR, MATS, setNight, setTime: (tt) => night && night.setTime(tt), openRegionMap, get night() { return night; }, get cars() { return cars; }, get regionMap() { return regionMap; }, get pois() { return pois; }, get planes() { return planes; }, get csm() { return csm; }, get composer() { return composer; }, get gtao() { return gtao; } };
 
 init().catch((err) => {
   console.error(err);

@@ -16,7 +16,7 @@
 const VERSION = '2026-09-09';
 const SHEET_STATUS = 'Status', SHEET_LOG = 'Log', SHEET_LEADS = 'Leads';
 const STATUSES = ['available', 'reserved', 'sold'];
-const PID_RE = /^LH_[0-9a-f]{32}$/;
+const PID_RE = /^LH_[0-9a-f]{32}(-[12])?$/;   // -1 / -2 = the two sides of a semi-detached house
 const MAX_FAILED_LOGINS = 8;          // per 10 minutes, across all clients (Apps Script has no client IP)
 const MAX_LEADS_PER_HOUR = 40;
 

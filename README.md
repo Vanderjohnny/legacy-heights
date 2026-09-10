@@ -65,6 +65,12 @@ type -> plan is explicit in that script: Type 1 = Altura (option 2), Type 2 = Ho
 (option 4), Type 4 duplex = Vista (option 6); the ASCENT plan is kept as `extraPlans` and not assigned.
 Status records are keyed by the property ID, so re-exporting the model never loses a reservation.
 
+**Units.** What is sold is a unit: a single house is one unit, a semi-detached (duplex) body holds two, one per side,
+because each side can be reserved or sold on its own. Two-lot duplexes use their two lots (codes A-19 / A-20); the
+312 duplexes drawn on a single lot have that lot split along the party wall (the body's local X = 0) into
+"B-12 A" / "B-12 B". Unit ids are `<property_id>` for singles and `<property_id>-1` / `-2` for the two sides; the
+backend, the deep links (`#p-<hex>-1`) and the status sheet use these ids. 967 units in total.
+
 ## Sales backend (statuses, passwords, leads)
 
 `tools/backend/Code.gs` is a Google Apps Script web app bound to a Google Sheet; `tools/backend/README.md` has the
