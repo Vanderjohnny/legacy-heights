@@ -33,10 +33,18 @@ Any other static server works for the read-only site (`python -m http.server 517
   never in front of a driveway), with light pools and real point lights near the camera, and ~45 % of the houses show
   lit windows.
 - **Cars**: seven slow cars drive on the left along the road centrelines (extracted from the dashed road paint), with
-  headlights and light cones at night. The body is `assets/models/car.glb`: the Audi A7 chosen in the Blender file,
-  decimated to ~52k triangles and its ~60 materials consolidated into 9 (Paint, Glass, Lights, TailLight, Chrome, Rim,
-  Black, Grey, Tyre) by the export script kept in `tools/blender_export_car.py`; the paint colour is randomised per car.
-  If the GLB is missing the site falls back to a lofted low-poly hatchback built in `src/cars.js`.
+  headlights and light cones at night. The dashes stop before every junction, so `src/cars.js` builds a road graph:
+  the centrelines are split where side streets meet them or where they cross, and the ends are joined by links found
+  on the 1 m asphalt grid (A* keeping ~1.5-2 m from the curb, straightened by line of sight, corners rounded, then
+  validated on the grid), so the cars turn at the corners (slowing down in the turn) instead of disappearing. Wide
+  concrete junction tables count as road; sidewalks and driveways do not. Dead-end streets without room for a U-turn
+  are never entered. `?carsdebug=1` draws the graph (blue centrelines, green links, red = dead ends). The body is
+  `assets/models/car.glb`: the Audi A7 chosen in the Blender file, decimated to ~52k triangles and its ~60 materials
+  consolidated into 9 (Paint, Glass, Lights, TailLight, Chrome, Rim, Black, Grey, Tyre) by the export script kept in
+  `tools/blender_export_car.py`; the paint colour is randomised per car. If the GLB is missing the site falls back to
+  a lofted low-poly hatchback built in `src/cars.js`.
+- **Branding**: the header and the loading card show the Legacy Heights logotype (`assets/logo.png`, black ink on a
+  transparent background, inverted by CSS at night) above the address line.
 - **Materials**: the ground uses PBR texture sets (Poly Haven, CC0, `tools/fetch_textures.py`: grass, asphalt,
   concrete). The houses keep their original colours and textures; a subtle plaster bump + roughness (facades), a
   corrugated-metal normal map across the ridge (roofs) and a concrete grain (base) are added through a second UV set

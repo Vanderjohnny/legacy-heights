@@ -39,6 +39,13 @@ fonts = "\n".join(re.findall(r"<link[^>]*fonts\.g[^>]*>", index))
 body = re.search(r"<body>(.*)</body>", index, re.S).group(1)
 body = re.sub(r"<script[^>]*src=[^>]*></script>", "", body).strip()
 css = open(os.path.join(SITE, "styles.css"), encoding="utf-8").read() + "\n" + open(os.path.join(SITE, "panel.css"), encoding="utf-8").read()
+# images referenced directly by the markup / stylesheets (the logo) become data URIs
+def data_uri(rel):
+    p = os.path.join(SITE, rel)
+    if not os.path.exists(p): return rel
+    return f"data:{mimetypes.guess_type(p)[0] or 'application/octet-stream'};base64," + base64.b64encode(open(p, "rb").read()).decode("ascii")
+body = re.sub(r'src="(assets/[^"]+)"', lambda m: f'src="{data_uri(m.group(1))}"', body)
+css = re.sub(r"url\((['\"]?)(assets/[^)'\"]+)\1\)", lambda m: f"url({data_uri(m.group(2))})", css)
 
 IMPORT_RE = re.compile(r"^import [^;]*? from '([^']+)';\s*$", re.M)
 def load_module(name):

@@ -15,13 +15,13 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // internal modules carry a version query so browsers never pair a new main.js with a cached old module
-import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW } from './config.js?v=18';
-import { api } from './api.js?v=18';
-import { createNight } from './night.js?v=18';
-import { createCars } from './cars.js?v=18';
-import { createRegionMap } from './region.js?v=18';
-import { createPois } from './poi.js?v=18';
-import { createPlanes } from './planes.js?v=18';
+import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW } from './config.js?v=19';
+import { api } from './api.js?v=19';
+import { createNight } from './night.js?v=19';
+import { createCars } from './cars.js?v=19';
+import { createRegionMap } from './region.js?v=19';
+import { createPois } from './poi.js?v=19';
+import { createPlanes } from './planes.js?v=19';
 
 const THREE_VERSION = '0.170.0';
 const ASSET_V = '2026-09-10m';   // bump when models/textures change so browsers do not keep stale copies
@@ -293,7 +293,7 @@ async function init() {
   await buildTrees(data);
   night = createNight({ scene, renderer, camera, controls, getCsm: () => csm, hemi, treeGroup, worldGround, satMeshes, HORIZON, pmrem, isTouch: IS_TOUCH, lots: state.lots, lotByHouse: state.lotByHouse, pavedClass, models, rebuildInstances, sunDir: SUN_DIR, onTime, siteBounds: state.data.bounds, airport: state.airport, runway: runwayCentreline(state.airport), glassMats });
   night.build();
-  cars = createCars({ scene, loadGLB, pavedClass, paintGeometries: groundMeshes.filter((o) => (Array.isArray(o.material) ? o.material[0] : o.material) === MATS.paint).map((o) => o.geometry), isTouch: IS_TOUCH });
+  cars = createCars({ scene, loadGLB, pavedClass, pavedGrid: paved, debug: /carsdebug/.test(location.search), paintGeometries: groundMeshes.filter((o) => (Array.isArray(o.material) ? o.material[0] : o.material) === MATS.paint).map((o) => o.geometry), isTouch: IS_TOUCH });
   state.carReport = await cars.build();
   const runway = runwayCentreline(state.airport);
   if (runway) planes = createPlanes({ scene, runway, isTouch: IS_TOUCH, groundY: -0.5 });

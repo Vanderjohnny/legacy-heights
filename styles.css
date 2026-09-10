@@ -27,15 +27,16 @@ h1, h2, h3, p { margin: 0; }
 .loading-card p { color: var(--ink-2); margin-bottom: 18px; }
 .bar { height: 6px; background: rgba(16,20,24,0.1); border-radius: 6px; overflow: hidden; }
 #loading-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #e8962a, #f7c264); transition: width 0.25s ease; }
-.brand-mark { width: 52px; height: 52px; margin: 0 auto; border-radius: 14px; background: var(--ink); color: #fff; display: grid; place-items: center; font-family: var(--serif); font-weight: 600; font-size: 20px; letter-spacing: 0.02em; }
-.brand-mark.small { width: 40px; height: 40px; font-size: 15px; border-radius: 11px; margin: 0; }
+/* logotype (assets/logo.png: black ink on transparent, inverted at night) */
+.brand-logo { display: block; width: 168px; height: auto; user-select: none; -webkit-user-drag: none; }
+.brand-logo.large { width: 240px; margin: 0 auto 10px; }
 
 /* top bar */
-#topbar { position: fixed; top: 14px; left: 14px; right: 14px; z-index: 20; display: flex; align-items: center; gap: 14px; pointer-events: none; }
+#topbar { position: fixed; top: 14px; left: 14px; right: 14px; z-index: 20; display: flex; align-items: flex-start; gap: 14px; pointer-events: none; }
 #topbar > * { pointer-events: auto; }
-.brand { display: flex; align-items: center; gap: 12px; padding: 8px 14px 8px 8px; background: var(--paper); backdrop-filter: blur(14px); border-radius: var(--radius); box-shadow: var(--shadow); }
-.brand h1 { font-family: var(--serif); font-weight: 500; font-size: 19px; line-height: 1.1; }
-.brand p { font-size: 11.5px; color: var(--ink-2); margin-top: 2px; }
+.brand { display: flex; align-items: center; padding: 10px 16px 9px; background: var(--paper); backdrop-filter: blur(14px); border-radius: var(--radius); box-shadow: var(--shadow); }
+.brand-block { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.brand p { font-size: 11px; color: var(--ink-2); letter-spacing: 0.02em; text-align: center; white-space: nowrap; }
 .search-wrap { position: relative; flex: 0 1 300px; }
 #search { width: 100%; height: 44px; border: 0; border-radius: var(--radius); padding: 0 16px; background: var(--paper); backdrop-filter: blur(14px); box-shadow: var(--shadow); font: inherit; color: var(--ink); outline: none; }
 #search:focus { box-shadow: var(--shadow), 0 0 0 3px rgba(232,150,42,0.35); }
@@ -115,10 +116,9 @@ h1, h2, h3, p { margin: 0; }
 @media (max-width: 640px) {
   /* phone layout: two-row header, chip strip for the legend, bottom sheet for the details */
   #topbar { top: 8px; left: 8px; right: 8px; gap: 6px; }
-  .brand { padding: 5px 10px 5px 5px; border-radius: 12px; gap: 8px; }
-  .brand h1 { font-size: 15px; }
+  .brand { padding: 7px 10px 6px; border-radius: 12px; }
   .brand p { display: none; }
-  .brand-mark.small { width: 30px; height: 30px; font-size: 12px; border-radius: 9px; }
+  .brand-logo { width: 104px; }
   .search-wrap { order: 3; flex: 1 1 100%; }
   #search { height: 36px; font-size: 14px; border-radius: 12px; padding: 0 12px; }
   #search-results { top: 42px; }
