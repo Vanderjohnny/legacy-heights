@@ -12,10 +12,11 @@ import requests
 ap = argparse.ArgumentParser()
 ap.add_argument('url')
 ap.add_argument('--reserve', default=os.environ.get('LH_RESERVE_PASSWORD', 'reserve123'))
-ap.add_argument('--admin', default=os.environ.get('LH_ADMIN_PASSWORD', 'admin123'))
+ap.add_argument('--admin', default=os.environ.get('LH_ADMIN_PASSWORD') or None, help='separate admin password (defaults to the sales password)')
 ap.add_argument('--pid', default=None)
 ap.add_argument('--skip-lead', action='store_true', help='do not send the test lead (avoids a test e-mail to the sales team)')
 args = ap.parse_args()
+if not args.admin: args.admin = args.reserve
 URL = args.url.rstrip('/')
 
 SITE = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
@@ -52,7 +53,8 @@ check('property starts available', pid not in get_statuses())
 r = post({'action': 'reserve', 'pid': pid, 'code': CODE, 'password': 'definitely-wrong', 'by': 'test'})
 check('wrong password is rejected', r.get('error') == 'unauthorized', json.dumps(r))
 r = post({'action': 'sold', 'pid': pid, 'code': CODE, 'password': args.reserve, 'by': 'test'})
-check('sales password cannot mark as sold', r.get('error') == 'unauthorized', json.dumps(r))
+check('sales password cannot mark as sold (only when a separate admin password is set)', r.get('error') == 'unauthorized' if args.admin != args.reserve else r.get('ok') is True, json.dumps(r))
+if args.admin == args.reserve and r.get('ok'): post({'action': 'release', 'pid': pid, 'code': CODE, 'password': args.admin, 'by': 'test'})
 r = post({'action': 'reserve', 'pid': 'LH_notanid', 'code': CODE, 'password': args.reserve, 'by': 'test'})
 check('malformed property id is rejected', r.get('error') == 'bad-request', json.dumps(r))
 

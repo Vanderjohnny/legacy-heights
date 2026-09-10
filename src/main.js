@@ -15,16 +15,16 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // internal modules carry a version query so browsers never pair a new main.js with a cached old module
-import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW } from './config.js?v=14';
-import { api } from './api.js?v=14';
-import { createNight } from './night.js?v=14';
-import { createCars } from './cars.js?v=14';
-import { createRegionMap } from './region.js?v=14';
-import { createPois } from './poi.js?v=14';
-import { createPlanes } from './planes.js?v=14';
+import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW } from './config.js?v=15';
+import { api } from './api.js?v=15';
+import { createNight } from './night.js?v=15';
+import { createCars } from './cars.js?v=15';
+import { createRegionMap } from './region.js?v=15';
+import { createPois } from './poi.js?v=15';
+import { createPlanes } from './planes.js?v=15';
 
 const THREE_VERSION = '0.170.0';
-const ASSET_V = '2026-09-10i';   // bump when models/textures change so browsers do not keep stale copies
+const ASSET_V = '2026-09-10j';   // bump when models/textures change so browsers do not keep stale copies
 const asset = (url) => `${url}${url.includes('?') ? '&' : '?'}v=${ASSET_V}`;
 // Single-file build (tools/build_single_html.py): every asset is embedded as base64 in window.LH_EMBED and nothing is fetched.
 const EMBED = window.LH_EMBED || null;
@@ -56,6 +56,8 @@ const state = {
   selected: null,
   activeTypes: new Set([1, 2, 3, 4]),
   activeParcels: new Set(PARCELS),
+  activeStatuses: new Set(['available', 'reserved', 'sold']),
+  byPhase: false,
   colorByType: false,
   flying: false,
   props: {},            // property registry (data/properties.json), keyed by the Blender property_id
@@ -853,7 +855,7 @@ function rebuildInstances(force = false) {
 }
 function refreshFacadeColors() { rebuildInstances(true); }
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
-const isVisibleHouse = (h) => state.activeTypes.has(h.type) && state.activeParcels.has(h.parcel);
+const isVisibleHouse = (h) => state.activeTypes.has(h.type) && state.activeParcels.has(h.parcel) && state.activeStatuses.has(statusOf(h));
 function applyFilter() {
   const visible = isVisibleHouse;
   for (const im of proxies) {
@@ -862,6 +864,7 @@ function applyFilter() {
   }
   rebuildInstances(true);
   updateCounter();
+  if (statusLines) buildStatusLines();
 }
 
 // ---------------------------------------------------------------------------
@@ -1157,7 +1160,7 @@ function buildStatusLines() {
   const pos = [], col = [];
   for (const h of state.houses) {
     const st = statusOf(h);
-    if (st === 'available') continue;
+    if (st === 'available' || !isVisibleHouse(h)) continue;
     const c = new THREE.Color(STATUS[st].hex);
     for (const poly of h.lotPolys) {
       for (let i = 0; i < poly.length; i++) {
@@ -1355,10 +1358,27 @@ function buildLegend() {
       applyFilter(); buildLegend();
     };
   });
-  // status legend
+  // status legend: chips toggle the statuses shown; "by phase" opens the breakdown per parcel
   const perStatus = { available: 0, reserved: 0, sold: 0 };
-  state.houses.forEach((h) => { perStatus[statusOf(h)]++; });
-  $('status-items').innerHTML = Object.entries(STATUS).map(([k, s]) => `<span class="schip"><span class="dot" style="background:${s.hex}"></span>${s.label[state.lang]} <b>${perStatus[k]}</b></span>`).join('');
+  const perPhase = {};
+  state.houses.forEach((h) => { const st = statusOf(h); perStatus[st]++; (perPhase[h.parcel] = perPhase[h.parcel] || { available: 0, reserved: 0, sold: 0 })[st]++; });
+  $('status-items').innerHTML = Object.entries(STATUS).map(([k, s]) => `<button class="schip ${state.activeStatuses.has(k) ? '' : 'off'}" data-status="${k}" title="${t('statusHint')}"><span class="dot" style="background:${s.hex}"></span>${s.label[state.lang]} <b>${perStatus[k]}</b></button>`).join('')
+    + `<button class="schip toggle ${state.byPhase ? 'on' : ''}" id="status-by-phase-btn">${t('byPhase')} ${state.byPhase ? '▴' : '▾'}</button>`;
+  $('status-items').querySelectorAll('.schip[data-status]').forEach((b) => {
+    b.onclick = (ev) => {
+      const k = b.dataset.status;
+      if (ev.shiftKey || ev.altKey) state.activeStatuses = new Set([k]);
+      else if (state.activeStatuses.has(k)) { if (state.activeStatuses.size > 1) state.activeStatuses.delete(k); }
+      else state.activeStatuses.add(k);
+      if (state.selected && !isVisibleHouse(state.selected)) clearSelection();
+      applyFilter(); buildLegend();
+    };
+  });
+  $('status-by-phase-btn').onclick = () => { state.byPhase = !state.byPhase; buildLegend(); };
+  const tbl = $('status-by-phase');
+  tbl.hidden = !state.byPhase;
+  tbl.innerHTML = state.byPhase ? `<div class="sbp-row head"><span>${t('parcel')}</span>${Object.values(STATUS).map((st) => `<span><span class="dot" style="background:${st.hex}"></span></span>`).join('')}</div>`
+    + PARCELS.filter((k) => perPhase[k]).map((k) => `<div class="sbp-row ${state.activeParcels.has(k) ? '' : 'off'}"><span><b>${k}</b></span><span>${perPhase[k].available}</span><span>${perPhase[k].reserved}</span><span>${perPhase[k].sold}</span></div>`).join('') : '';
 }
 function updateCounter() {
   const n = state.houses.filter(isVisibleHouse).length;
@@ -1481,7 +1501,7 @@ function openStatusChange(h, action) {
   const title = action === 'reserve' ? t('reserve') : action === 'sold' ? t('markSold') : (statusOf(h) === 'reserved' ? t('cancelReservation') : t('release'));
   openModal(`
     <h2>${title}</h2>
-    <p class="intro">${action === 'reserve' ? t('authIntro') : t('authIntroAdmin')}</p>
+    <p class="intro">${t('authIntro')}</p>
     <div class="ref"><b>${t('lot')} ${esc(h.code)}</b> · ${esc(h.prop?.planName || '')} · <code>${esc(h.pid)}</code></div>
     <form id="auth-form">
       <div class="field"><label for="auth-by">${t('name')}</label><input id="auth-by" name="by" autocomplete="name" /></div>

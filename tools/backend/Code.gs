@@ -10,7 +10,7 @@
  *   POST { action: 'interest', lead: { pid, code, name, email, phone, message, ... } }
  *
  * Setup (see README.md next to this file): run setup() once, fill the script properties
- * RESERVE_PASSWORD, ADMIN_PASSWORD, SALES_EMAIL (and optionally NOTIFY_EMAILS, SITE_URL), then deploy as a web app
+ * RESERVE_PASSWORD, SALES_EMAIL (optionally ADMIN_PASSWORD for a separate sold/release password, NOTIFY_EMAILS, SITE_URL), then deploy as a web app
  * ("Execute as: me", "Who has access: anyone") and paste the /exec URL into src/config.js (BACKEND.url).
  */
 const VERSION = '2026-09-09';
@@ -102,7 +102,8 @@ function handleStatusChange_(action, body) {
 function checkPassword_(password) {
   if (!password) return null;
   var p = PropertiesService.getScriptProperties();
-  var admin = p.getProperty('ADMIN_PASSWORD') || '', sales = p.getProperty('RESERVE_PASSWORD') || '';
+  var sales = p.getProperty('RESERVE_PASSWORD') || p.getProperty('SALES_PASSWORD') || '';
+  var admin = p.getProperty('ADMIN_PASSWORD') || sales;   // one password for everything when ADMIN_PASSWORD is not set
   if (admin && safeEqual_(password, admin)) return 'admin';
   if (sales && safeEqual_(password, sales)) return 'sales';
   return null;
@@ -187,7 +188,7 @@ function notify_(subject, body) {
 function setup() {
   var r = setup_();
   var p = PropertiesService.getScriptProperties();
-  var missing = ['RESERVE_PASSWORD', 'ADMIN_PASSWORD', 'SALES_EMAIL'].filter(function (k) { return !p.getProperty(k); });
+  var missing = ['RESERVE_PASSWORD', 'SALES_EMAIL'].filter(function (k) { return !p.getProperty(k); });
   Logger.log('Sheets ready: ' + [r.statusSheet.getName(), r.logSheet.getName(), r.leadsSheet.getName()].join(', '));
   Logger.log(missing.length ? 'Now set the script properties: ' + missing.join(', ') + ' (Project settings > Script properties)' : 'Script properties present.');
 }

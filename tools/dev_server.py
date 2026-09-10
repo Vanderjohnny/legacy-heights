@@ -14,7 +14,7 @@ from urllib.parse import urlparse, parse_qs
 PID_RE = re.compile(r'^LH_[0-9a-f]{32}$')
 STATUSES = ('available', 'reserved', 'sold')
 RESERVE_PW = os.environ.get('LH_RESERVE_PASSWORD', 'reserve123')
-ADMIN_PW = os.environ.get('LH_ADMIN_PASSWORD', 'admin123')
+ADMIN_PW = os.environ.get('LH_ADMIN_PASSWORD') or RESERVE_PW   # one password for everything unless an admin one is set
 MAX_FAILED_LOGINS, MAX_LEADS_PER_HOUR = 8, 40
 
 class Backend:

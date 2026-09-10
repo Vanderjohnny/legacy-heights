@@ -23,7 +23,9 @@ Any other static server works for the read-only site (`python -m http.server 517
 - **Property panel**: status badge, lot code, model name (Altura / Horizon / Pinnacle / Vista), parcel, property ID,
   areas (sq ft / sq m), facade colour, reference render, **floor plan** with enlarge/fullscreen, previous/next navigation.
 - **Sales status** (AVAILABLE / RESERVED / SOLD) shown in the panel, the tooltip, the legend counters and as coloured lot
-  outlines in the scene. Reserve, Mark as sold and Release ask for a password that is checked **server-side**
+  outlines in the scene. The status chips in the legend filter the houses shown (shift-click: only that status) and
+  "By phase" opens the available / reserved / sold counts per parcel. Reserve, Mark as sold and Release ask for a
+  password that is checked **server-side**
   (see *Sales backend*). "I'm interested" sends a lead to the sales team (never blocks the property).
 - **Time of day** (button Day/Night animates it, slider in the legend): the global lighting of the world and of the
   houses changes continuously (sun -> low orange sun -> moonlight, sky dome day -> dusk -> night with moon and stars,

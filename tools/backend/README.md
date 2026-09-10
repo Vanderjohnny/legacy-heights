@@ -14,8 +14,8 @@ Passwords are **script properties** of the Apps Script project: they are never w
 
    | property           | value                                                                 |
    |--------------------|-----------------------------------------------------------------------|
-   | `RESERVE_PASSWORD` | password of the sales team (can reserve)                              |
-   | `ADMIN_PASSWORD`   | password of the administrator (can mark as sold and release)          |
+   | `RESERVE_PASSWORD` | the sales password: reserve, mark as sold, release                    |
+   | `ADMIN_PASSWORD`   | optional: a separate password for sold / release (defaults to the one above) |
    | `SALES_EMAIL`      | who receives the "I'm interested" leads, e.g. `sales@unk.group`       |
    | `NOTIFY_EMAILS`    | optional: comma-separated addresses notified of every status change   |
    | `SITE_URL`         | optional: public site URL, used by `importRegistry` (pre-fills lots)  |
