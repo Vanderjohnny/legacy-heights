@@ -47,6 +47,9 @@ export const BACKEND = {
   pollSeconds: 45,                           // how often visitors refresh the property statuses
 };
 
+// Opening view (three.js coordinates: x east, y up, z south), captured from the viewer on 2026-09-10
+export const OVERVIEW = { pos: [39.4, 28.6, -530.1], target: [204.6, 0.7, -322.3] };
+
 export const PARCELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 // Blender lot numbers ("Terrenos NNN") that are parks: not selectable, no tooltip, filled with trees (besides the
 // open-space lots flagged hidden in the export)

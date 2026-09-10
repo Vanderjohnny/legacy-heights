@@ -15,16 +15,16 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // internal modules carry a version query so browsers never pair a new main.js with a cached old module
-import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS } from './config.js?v=11';
-import { api } from './api.js?v=11';
-import { createNight } from './night.js?v=11';
-import { createCars } from './cars.js?v=11';
-import { createRegionMap } from './region.js?v=11';
-import { createPois } from './poi.js?v=11';
-import { createPlanes } from './planes.js?v=11';
+import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW } from './config.js?v=12';
+import { api } from './api.js?v=12';
+import { createNight } from './night.js?v=12';
+import { createCars } from './cars.js?v=12';
+import { createRegionMap } from './region.js?v=12';
+import { createPois } from './poi.js?v=12';
+import { createPlanes } from './planes.js?v=12';
 
 const THREE_VERSION = '0.170.0';
-const ASSET_V = '2026-09-10f';   // bump when models/textures change so browsers do not keep stale copies
+const ASSET_V = '2026-09-10g';   // bump when models/textures change so browsers do not keep stale copies
 const asset = (url) => `${url}${url.includes('?') ? '&' : '?'}v=${ASSET_V}`;
 // Single-file build (tools/build_single_html.py): every asset is embedded as base64 in window.LH_EMBED and nothing is fetched.
 const EMBED = window.LH_EMBED || null;
@@ -783,7 +783,7 @@ function setupHouseModel(modelIdx, root, meta) {
         boxUV(geo, 1.6);
         mat.normalMap = HOUSE_TEX.concreteNor; mat.normalScale = new THREE.Vector2(0.4, 0.4); mat.roughness = 0.95; mat.color.set(0xe9e7e2); mat.map = null;
       } else if (mat.transparent) { mat.depthWrite = false; mat.opacity = 0.82; mat.color.set(0x8fa6ba); mat.roughness = 0.04; mat.metalness = 0.6; mat.envMapIntensity = 1.9; glassMats.push(mat); }   // window glass: reflective, barely translucent
-      else if (/gray|grey|dark/i.test(name)) { mat.roughness = 0.6; }
+      else if (/gray|grey|dark/i.test(name)) { mat.color.set(0xdadcde); mat.roughness = 0.6; }   // roof edges / fascia: light grey
       mat.side = THREE.DoubleSide;   // the SketchUp-derived bodies have inconsistent face orientation
     }
     hi.push(make(geo, mat, isFacade));
@@ -1005,7 +1005,23 @@ async function buildTrees(data) {
   if (!paved) buildPavedGrid();
   const extra = scatterParkTrees(data);
   state.parkTrees = extra.length; state.parkTreeList = extra;
-  data.trees.concat(extra).forEach((tr) => groups[tr.s]?.items.push(tr));
+  // drop the modelled trees that stand inside a house footprint (with a 2.2 m margin) or on the road
+  const _tp = new THREE.Vector3(), _inv = new THREE.Matrix4();
+  const insideHouse = (x, y) => {
+    const lot = lotAt(x, y); const h = lot && state.lotByHouse.get(lot.id);
+    const cands = h ? [h] : state.houses.filter((hh) => Math.abs(hh.pos[0] - x) < 16 && Math.abs(hh.pos[1] - y) < 16);
+    for (const hh of cands) {
+      const info = modelInfo[hh.model]; if (!info) continue;
+      _tp.set(x, 1, -y).applyMatrix4(_inv.copy(hh.matrix).invert());
+      const hx = info.size.x / 2 + 2.2, hz = info.size.z / 2 + 2.2;   // crowns are ~3 m wide: keep the trunks clear of the walls
+      if (Math.abs(_tp.x - info.center.x) < hx && Math.abs(_tp.z - info.center.z) < hz) return true;
+    }
+    return false;
+  };
+  let dropped = 0;
+  const kept = data.trees.filter((tr) => { const bad = insideHouse(tr.p[0], tr.p[1]) || pavedClass(tr.p[0], tr.p[1]) >= 2; if (bad) dropped++; return !bad; });
+  state.treesDropped = dropped;
+  kept.concat(extra).forEach((tr) => groups[tr.s]?.items.push(tr));
   const tmp = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3(), ax = new THREE.Vector3(0, 1, 0);
   for (const g of groups) {
     if (!g.items.length) continue;
@@ -1208,11 +1224,10 @@ function siteCenter() {
   return b2t((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, 0);
 }
 function setOverview(instant = false) {
-  const c = siteCenter();
-  // portrait phones need a higher, more distant viewpoint to fit the whole site between the header and the legend
+  // the opening view picked in the viewer (config.OVERVIEW); portrait phones pull back and up so the site still fits
+  const target = new THREE.Vector3(...OVERVIEW.target), pos = new THREE.Vector3(...OVERVIEW.pos);
   const portrait = window.innerHeight > window.innerWidth;
-  const target = c.clone().add(new THREE.Vector3(0, 0, portrait ? -80 : -30));
-  const pos = c.clone().add(portrait ? new THREE.Vector3(-30, 900, 760) : new THREE.Vector3(-60, 500, 610));
+  if (portrait) { pos.sub(target).multiplyScalar(1.7).add(target); pos.y += 60; }
   if (instant) { camera.position.copy(pos); controls.target.copy(target); controls.update(); }
   else flyTo(pos, target, 1600);
 }
