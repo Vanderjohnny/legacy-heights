@@ -161,7 +161,7 @@ export function createNight(ctx) {
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
       geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-      const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size: cfg.size, sizeAttenuation: true, map: dotTex, vertexColors: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, alphaTest: 0.02 }));
+      const pts = new THREE.Points(geo, capPointSize(new THREE.PointsMaterial({ size: cfg.size, sizeAttenuation: true, map: dotTex, vertexColors: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, alphaTest: 0.02 }), 14));
       pts.frustumCulled = false; pts.renderOrder = 2;
       S.city.add(pts); total += pick.length;
     });
@@ -169,11 +169,90 @@ export function createNight(ctx) {
     S.cityCount = total;
     if (S.t > 0.5) applyCity(S.t);
   }
+  // sizeAttenuation makes nearby points balloon: cap the sprite size in pixels
+  const capPointSize = (mat, px) => { mat.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace('#include <logdepthbuf_vertex>', `gl_PointSize = min(gl_PointSize, ${px}.0);
+#include <logdepthbuf_vertex>`); }; return mat; };
   function applyCity(t) {
-    if (!S.city) return;
     const k = smooth(0.52, 0.85, t) * 0.95;
-    S.city.visible = k > 0;
-    for (const p of S.city.children) p.material.opacity = k;
+    if (S.city) { S.city.visible = k > 0; for (const p of S.city.children) p.material.opacity = k; }
+    if (S.airport) { S.airport.visible = k > 0; for (const o of S.airport.children) o.material.opacity = o.userData.opacity * k; }
+  }
+  // ------------------------------------------------------------------------------------------------------------
+  // Grantley Adams at night: runway edge / centreline / threshold / approach lights along the OSM centreline,
+  // blue taxiway edges around the aprons and warm floodlight glows over the aprons and the terminal.
+  // ------------------------------------------------------------------------------------------------------------
+  function buildAirport() {
+    const ap = ctx.airport; if (!ap) return;
+    if (!ctx.runway) return;
+    const y = 0.9;
+    const P = ctx.runway.map(([x, yy]) => new THREE.Vector3(x, y, -yy));
+    const A = P[0], B = P[P.length - 1];
+    const axis = B.clone().sub(A).setY(0); const L = axis.length(); axis.normalize();
+    const side = new THREE.Vector3(-axis.z, 0, axis.x);
+    const W = 46;
+    const pos = [], col = [];
+    const add = (p, c, br = 1) => { pos.push(p.x, p.y, p.z); col.push(c[0] * br, c[1] * br, c[2] * br); };
+    const white = [1, 0.96, 0.88], green = [0.25, 1, 0.35], red = [1, 0.15, 0.1], amber = [1, 0.72, 0.2], blue = [0.35, 0.55, 1];
+    for (let d = 0; d <= L; d += 60) {
+      const base = A.clone().addScaledVector(axis, d), c = (d < 600 || d > L - 600) ? amber : white;
+      add(base.clone().addScaledVector(side, W / 2 + 3), c, 1.2); add(base.clone().addScaledVector(side, -W / 2 - 3), c, 1.2);
+    }
+    for (let d = 15; d < L; d += 30) add(A.clone().addScaledVector(axis, d), white, 0.55);
+    for (const [end, dir] of [[A, 1], [B, -1]]) {
+      for (let k = -4; k <= 4; k++) { const o = end.clone().addScaledVector(side, k * W / 9); add(o.clone().addScaledVector(axis, dir * 3), green, 1.3); add(o.clone().addScaledVector(axis, -dir * 3), red, 1.1); }
+      for (let d = 30; d <= 900; d += 30) {
+        const o = end.clone().addScaledVector(axis, -dir * d); add(o, white, 1.2);
+        if (d % 300 === 0) for (const k of [-2, -1, 1, 2]) add(o.clone().addScaledVector(side, k * 4.5), white, 0.9);
+      }
+    }
+    const glows = [];
+    for (const apron of ap.apron || []) {
+      const pts = apron.pts; if (!pts || pts.length < 3) continue;
+      let cx = 0, cy = 0; for (const [x, yy] of pts) { cx += x; cy += yy; } cx /= pts.length; cy /= pts.length;
+      let acc = 0;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const [x0, y0] = pts[i], [x1, y1] = pts[i + 1], len = Math.hypot(x1 - x0, y1 - y0);
+        for (let d = acc % 40 === 0 ? 0 : 40 - (acc % 40); d < len; d += 40) { const k = d / len; add(new THREE.Vector3(x0 + (x1 - x0) * k, y, -(y0 + (y1 - y0) * k)), blue, 0.8); }
+        acc += len;
+      }
+      let r = 0; for (const [x, yy] of pts) r = Math.max(r, Math.hypot(x - cx, yy - cy));
+      glows.push({ x: cx, z: -cy, r: Math.min(260, Math.max(90, r * 0.8)), o: 0.35 });
+    }
+    for (const term of ap.terminal || []) {
+      const pts = term.pts; if (!pts || pts.length < 3) continue;
+      let cx = 0, cy = 0; for (const [x, yy] of pts) { cx += x; cy += yy; } cx /= pts.length; cy /= pts.length;
+      glows.push({ x: cx, z: -cy, r: 160, o: 0.45 });
+      for (let i = 0; i < pts.length; i += 6) add(new THREE.Vector3(pts[i][0], y + 6, -pts[i][1]), white, 1.4);
+    }
+    S.airport = new THREE.Group(); S.airport.visible = false;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    const pts = new THREE.Points(geo, capPointSize(new THREE.PointsMaterial({ size: 16, sizeAttenuation: true, map: dotTexture(), vertexColors: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, alphaTest: 0.02, fog: false }), 18));
+    pts.frustumCulled = false; pts.renderOrder = 2; pts.userData.opacity = 1;
+    S.airport.add(pts);
+    // warm glow strip along the runway + discs over the aprons / terminal
+    const glowMat = (o) => { const m = new THREE.MeshBasicMaterial({ map: dotTexture(), color: 0xffe2b0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }); return m; };
+    const strip = new THREE.Mesh(new THREE.PlaneGeometry(L + 200, W + 70).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x8c7a5a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    strip.position.copy(A).addScaledVector(axis, L / 2).setY(y - 0.3); strip.rotation.y = -Math.atan2(axis.z, axis.x); strip.userData.opacity = 0.42; strip.renderOrder = 1;
+    S.airport.add(strip);
+    for (const g of glows) {
+      const disc = new THREE.Mesh(new THREE.PlaneGeometry(g.r * 2, g.r * 2).rotateX(-Math.PI / 2), glowMat());
+      disc.position.set(g.x, y - 0.2, g.z); disc.userData.opacity = g.o; disc.renderOrder = 1;
+      S.airport.add(disc);
+    }
+    scene.add(S.airport);
+    S.airportLights = pos.length / 3;
+  }
+  let _dotTex = null;
+  function dotTexture() {
+    if (_dotTex) return _dotTex;
+    const dot = document.createElement('canvas'); dot.width = dot.height = 32;
+    const dc = dot.getContext('2d'); const g = dc.createRadialGradient(16, 16, 0, 16, 16, 16);
+    g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.35, 'rgba(255,255,255,0.7)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    dc.fillStyle = g; dc.fillRect(0, 0, 32, 32);
+    _dotTex = new THREE.CanvasTexture(dot); _dotTex.colorSpace = THREE.SRGBColorSpace;
+    return _dotTex;
   }
 
   // ------------------------------------------------------------------------------------------------------------
@@ -339,7 +418,7 @@ export function createNight(ctx) {
     scene.environmentIntensity = t < 0.5 ? lerp(0.85, 0.4, s1) : lerp(0.4, 0.75, s2);
     hemi.color.copy(t < 0.5 ? _c2.copy(COL.hemiSkyDay).lerp(COL.hemiSkyDusk, s1) : _c2.copy(COL.hemiSkyDusk).lerp(COL.hemiSkyNight, s2));
     hemi.groundColor.copy(_c2.copy(COL.hemiGroundDay).lerp(COL.hemiGroundNight, smooth(0.3, 0.9, t)));
-    hemi.intensity = t < 0.5 ? lerp(0.2, 0.45, s1) : lerp(0.45, 0.6, s2);
+    hemi.intensity = t < 0.5 ? lerp(0.3, 0.45, s1) : lerp(0.45, 0.6, s2);
     scene.fog.color.copy(t < 0.5 ? _c2.copy(HORIZON).lerp(COL.fogDusk, s1) : _c2.copy(COL.fogDusk).lerp(COL.fogNight, s2));
     scene.fog.near = lerp(4000, 1500, smooth(0.3, 0.9, t)); scene.fog.far = lerp(26000, 15000, smooth(0.3, 0.9, t));
     renderer.toneMappingExposure = lerp(0.95, 1.0, s2);
@@ -356,6 +435,7 @@ export function createNight(ctx) {
     S.pools.material.opacity = 0.4 * k; S.pools.visible = k > 0;
     for (const pl of S.points) pl.intensity = LAMP.pointIntensity * k;
     for (const im of Object.values(S.windows)) { im.material.color.set(LAMP.window).multiplyScalar(0.25 + 0.75 * k); im.visible = k > 0; }
+    for (const m of ctx.glassMats || []) m.opacity = lerp(0.82, 0.45, k);   // the lit rooms show through at night
     if ((k > 0) !== wasOn) ctx.rebuildInstances(true);
     S.lastTarget.set(Infinity, 0, 0);
     if (ctx.onTime) ctx.onTime(t);
@@ -383,8 +463,8 @@ export function createNight(ctx) {
 
   function build() {
     SUN_LOW.copy(ctx.sunDir).setY(0).normalize().multiplyScalar(0.98).setY(0.14).normalize();
-    buildSky(); buildLamps(); buildWindows(); buildCityLights();
+    buildSky(); buildLamps(); buildWindows(); buildCityLights(); buildAirport();
     setTime(0);
   }
-  return { build, setTime, animateTo, update, setWindows, isLit, get t() { return S.t; }, get on() { return S.t >= 0.5; }, get lamps() { return S.lamps; }, get cityLights() { return S.cityCount || 0; }, get objects() { return S; } };
+  return { build, setTime, animateTo, update, setWindows, isLit, get t() { return S.t; }, get on() { return S.t >= 0.5; }, get lamps() { return S.lamps; }, get cityLights() { return S.cityCount || 0; }, get airportLights() { return S.airportLights || 0; }, get objects() { return S; } };
 }

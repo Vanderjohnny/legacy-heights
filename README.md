@@ -46,6 +46,10 @@ Any other static server works for the read-only site (`python -m http.server 517
   satellite map with the list per category.
 - **Parks**: the open-space lots (Blender "hidden" flag plus `PARK_LOTS` in `src/config.js`) are filled with trees,
   are not selectable and show no tooltip.
+- **Airport**: `data/airport.json` (OpenStreetMap runway centreline / outline, aprons, terminal) drives the runway
+  lighting at night (edge, centreline, threshold and approach lights, floodlit aprons and terminal, `src/night.js`)
+  and two aircraft (`src/planes.js`): one landing on runway 09 from the sea and one taking off, on random cycles,
+  with navigation lights, strobes and a landing light after dark.
 - Responsive: desktop, tablet (narrower panel below the header), phone (bottom-sheet panel, chip legend).
 - Deep links: `#p-<property id without LH_>` (also `#casa-042`).
 

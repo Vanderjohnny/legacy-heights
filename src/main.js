@@ -15,15 +15,16 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // internal modules carry a version query so browsers never pair a new main.js with a cached old module
-import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS } from './config.js?v=9';
-import { api } from './api.js?v=9';
-import { createNight } from './night.js?v=9';
-import { createCars } from './cars.js?v=9';
-import { createRegionMap } from './region.js?v=9';
-import { createPois } from './poi.js?v=9';
+import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS } from './config.js?v=10';
+import { api } from './api.js?v=10';
+import { createNight } from './night.js?v=10';
+import { createCars } from './cars.js?v=10';
+import { createRegionMap } from './region.js?v=10';
+import { createPois } from './poi.js?v=10';
+import { createPlanes } from './planes.js?v=10';
 
 const THREE_VERSION = '0.170.0';
-const ASSET_V = '2026-09-10d';   // bump when models/textures change so browsers do not keep stale copies
+const ASSET_V = '2026-09-10e';   // bump when models/textures change so browsers do not keep stale copies
 const asset = (url) => `${url}${url.includes('?') ? '&' : '?'}v=${ASSET_V}`;
 // Single-file build (tools/build_single_html.py): every asset is embedded as base64 in window.LH_EMBED and nothing is fetched.
 const EMBED = window.LH_EMBED || null;
@@ -198,7 +199,7 @@ function setupPost() {
   gtao.output = GTAOPass.OUTPUT.Default;
   gtao.updateGtaoMaterial({ radius: 1.6, distanceExponent: 1, thickness: 1, distanceFallOff: 1, scale: 1.2, samples: 16, screenSpaceRadius: false });
   gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 4, radiusExponent: 1, rings: 2, samples: 16 });
-  gtao.blendIntensity = 1;
+  gtao.blendIntensity = 0.7;
   const orig = gtao.render.bind(gtao);
   gtao.render = (...args) => { treeGroup.visible = false; orig(...args); treeGroup.visible = true; };   // tree cards are alpha-tested: keep them out of the AO buffers
   composer.addPass(gtao);
@@ -247,20 +248,23 @@ const houseGroups = [];      // InstancedMesh list (visible geometry)
 const proxies = [];          // invisible instanced boxes for picking (one per model)
 const modelInfo = {};        // model index -> { center: Vector3 (local three), size }
 let lotLines, hoverLine, selectLine, selectFill;
-let night = null, cars = null, regionMap = null, pois = null;   // night mode / streetlights, moving cars, regional map
+let night = null, cars = null, regionMap = null, pois = null, planes = null;
+const glassMats = [];   // house window glass (opacity eases at night so the lit windows show)   // night mode / streetlights, moving cars, regional map
 
 async function init() {
-  const [data, registry, statusDoc, poiDoc] = await Promise.all([
+  const [data, registry, statusDoc, poiDoc, airport] = await Promise.all([
     loadJson('data/site.json'),
     loadJson('data/properties.json').catch(() => ({ properties: {} })),
     api.statuses().catch(() => ({ statuses: {} })),
     loadJson('data/poi.json').catch(() => ({ pois: [], categories: {} })),
+    loadJson('data/airport.json').catch(() => null),
   ]);
   state.data = data;
   state.props = registry.properties || {};
   state.registry = registry;
   state.status = statusDoc.statuses || {};
   state.poiDoc = poiDoc;
+  state.airport = airport;
   prepareData(data);
   buildLots(data);
 
@@ -285,10 +289,12 @@ async function init() {
     }
   } else houseGltfs.forEach((g, idx) => setupHouseModel(idx + 1, g.scene, data.models[idx + 1]));
   await buildTrees(data);
-  night = createNight({ scene, renderer, camera, controls, getCsm: () => csm, hemi, treeGroup, worldGround, satMeshes, HORIZON, pmrem, isTouch: IS_TOUCH, lots: state.lots, lotByHouse: state.lotByHouse, pavedClass, models, rebuildInstances, sunDir: SUN_DIR, onTime, siteBounds: state.data.bounds });
+  night = createNight({ scene, renderer, camera, controls, getCsm: () => csm, hemi, treeGroup, worldGround, satMeshes, HORIZON, pmrem, isTouch: IS_TOUCH, lots: state.lots, lotByHouse: state.lotByHouse, pavedClass, models, rebuildInstances, sunDir: SUN_DIR, onTime, siteBounds: state.data.bounds, airport: state.airport, runway: runwayCentreline(state.airport), glassMats });
   night.build();
-  cars = createCars({ scene, loadGLB, paintGeometries: groundMeshes.filter((o) => (Array.isArray(o.material) ? o.material[0] : o.material) === MATS.paint).map((o) => o.geometry), isTouch: IS_TOUCH });
+  cars = createCars({ scene, loadGLB, pavedClass, paintGeometries: groundMeshes.filter((o) => (Array.isArray(o.material) ? o.material[0] : o.material) === MATS.paint).map((o) => o.geometry), isTouch: IS_TOUCH });
   state.carReport = await cars.build();
+  const runway = runwayCentreline(state.airport);
+  if (runway) planes = createPlanes({ scene, runway, isTouch: IS_TOUCH, groundY: -0.5 });
   applyShading();
   setupPost();
   applyFilter();
@@ -412,11 +418,11 @@ async function setupSatellite() {
 const MATS = {
   grass: texturedMaterial({ diff: 'assets/tex/grass_diff.jpg', nor: 'assets/tex/grass_nor.jpg', color: 0xe6efd8, normalScale: 0.5 }),
   asphalt: texturedMaterial({ diff: 'assets/tex/asphalt_diff.jpg', nor: 'assets/tex/asphalt_nor.jpg', rough: 'assets/tex/asphalt_rough.jpg', color: 0x767472 }),
-  concrete: texturedMaterial({ diff: 'assets/tex/concrete_diff.jpg', nor: 'assets/tex/concrete_nor.jpg', color: 0xd9d5cb, normalScale: 0.5 }),
+  concrete: texturedMaterial({ diff: 'assets/tex/concrete_diff.jpg', nor: 'assets/tex/concrete_nor.jpg', color: 0xf3f1ec, normalScale: 0.35 }),   // light grey concrete (slabs, driveways, sidewalks, curbs)
   path: texturedMaterial({ diff: 'assets/tex/concrete_diff.jpg', nor: 'assets/tex/concrete_nor.jpg', color: 0xcdbfa0, normalScale: 0.5 }),
   hedge: texturedMaterial({ diff: 'assets/tex/grass_diff.jpg', nor: 'assets/tex/grass_nor.jpg', color: 0x6a9a52, normalScale: 0.8 }),
   paint: new THREE.MeshStandardMaterial({ color: 0xe9e7df, roughness: 0.8, metalness: 0 }),
-  curb: new THREE.MeshStandardMaterial({ color: 0x8e8e8b, roughness: 0.92, metalness: 0 }),   // plain grey concrete curb
+  curb: new THREE.MeshStandardMaterial({ color: 0xdedcd6, roughness: 0.92, metalness: 0 }),   // light grey concrete curb
   other: new THREE.MeshStandardMaterial({ color: 0xa8a49b, roughness: 0.9, metalness: 0 }),
 };
 const TILE = new Map([[MATS.grass, 1.6], [MATS.asphalt, 3.2], [MATS.concrete, 1.2], [MATS.path, 1.2], [MATS.hedge, 1.2], [MATS.curb, 1.0]]);
@@ -433,7 +439,8 @@ const HOUSE_MATS = {
 };
 // second UV set by projecting each vertex along its dominant normal axis (walls: horizontal + height, roof/floor: plan),
 // in metres; swap = rotate the pattern 90 degrees (roof ribs run down the slope, across the ridge)
-function boxUV(geo, tile, swap = false) {
+function boxUV(geo, tile, swap = false, attr = 'uv1') {
+  if (!geo.attributes.normal) geo.computeVertexNormals();
   const p = geo.attributes.position, n = geo.attributes.normal, uv = new Float32Array(p.count * 2);
   for (let i = 0; i < p.count; i++) {
     const nx = Math.abs(n.getX(i)), ny = Math.abs(n.getY(i)), nz = Math.abs(n.getZ(i));
@@ -444,8 +451,8 @@ function boxUV(geo, tile, swap = false) {
     if (swap) { const w = u; u = v; v = w; }
     uv[i * 2] = u / tile; uv[i * 2 + 1] = v / tile;
   }
-  geo.setAttribute('uv1', new THREE.BufferAttribute(uv, 2));
-  if (!geo.attributes.uv) geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  geo.setAttribute(attr, new THREE.BufferAttribute(uv, 2));
+  if (attr === 'uv1' && !geo.attributes.uv) geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
 }
 const PAVED = new Set([MATS.asphalt, MATS.concrete, MATS.path, MATS.curb, MATS.paint]);
 const groundMeshes = [];
@@ -511,7 +518,8 @@ function setupGround(root) {
     o.material = Array.isArray(o.material) ? mapped : mapped[0];
     const first = mapped[0];
     if (first === MATS.hedge) lowerHedges(o.geometry);
-    if (TILE.has(first)) planarUV(o.geometry, TILE.get(first), first === MATS.hedge);
+    if (first === MATS.concrete || first === MATS.curb) boxUV(o.geometry, TILE.get(first), false, 'uv');
+    else if (TILE.has(first)) planarUV(o.geometry, TILE.get(first), first === MATS.hedge);
     o.receiveShadow = true;
     o.castShadow = first === MATS.hedge;
     groundMeshes.push(o);
@@ -737,8 +745,8 @@ function setupHouseModel(modelIdx, root, meta) {
         mat.normalMap = HOUSE_TEX.roofNor; mat.normalScale = new THREE.Vector2(0.8, 0.8); mat.roughnessMap = HOUSE_TEX.roofRough; mat.roughness = 1; mat.metalness = Math.max(mat.metalness ?? 0, 0.35);
       } else if (/concret/i.test(name)) {                       // concrete base: subtle grain
         boxUV(geo, 1.6);
-        mat.normalMap = HOUSE_TEX.concreteNor; mat.normalScale = new THREE.Vector2(0.4, 0.4); mat.roughness = 0.95;
-      } else if (mat.transparent) { mat.depthWrite = false; mat.roughness = 0.08; mat.metalness = 0.1; mat.envMapIntensity = 1.2; }   // window glass: reflective
+        mat.normalMap = HOUSE_TEX.concreteNor; mat.normalScale = new THREE.Vector2(0.4, 0.4); mat.roughness = 0.95; mat.color.set(0xe9e7e2); mat.map = null;
+      } else if (mat.transparent) { mat.depthWrite = false; mat.opacity = 0.82; mat.color.set(0x8fa6ba); mat.roughness = 0.04; mat.metalness = 0.6; mat.envMapIntensity = 1.9; glassMats.push(mat); }   // window glass: reflective, barely translucent
       else if (/gray|grey|dark/i.test(name)) { mat.roughness = 0.6; }
       mat.side = THREE.DoubleSide;   // the SketchUp-derived bodies have inconsistent face orientation
     }
@@ -1152,6 +1160,13 @@ function updateFlight(now) {
   camera.lookAt(controls.target);
   if (k >= 1) { flight = null; state.flying = false; controls.enabled = true; controls.update(); }
 }
+// the OSM runway is exported twice: the outline (closed polygon) and the centreline (open way); take the open one
+function runwayCentreline(ap) {
+  const ways = (ap?.runway || []).filter((w) => w.pts && w.pts.length >= 2);
+  const span = (w) => Math.hypot(w.pts[0][0] - w.pts[w.pts.length - 1][0], w.pts[0][1] - w.pts[w.pts.length - 1][1]);
+  ways.sort((a, b) => span(b) - span(a));
+  return ways.length && span(ways[0]) > 500 ? ways[0].pts : null;
+}
 function siteCenter() {
   const b = state.data.bounds;
   return b2t((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, 0);
@@ -1440,6 +1455,7 @@ function onTime(tt) {
     $('btn-night').classList.toggle('active', on);
   }
   if (cars) cars.setNight(tt >= 0.55);
+  if (planes) planes.setNight(tt <= 0.5 ? 0 : Math.min(1, (tt - 0.5) / 0.22));
   const sl = $('time-slider');
   if (sl && document.activeElement !== sl) sl.value = Math.round(tt * 1000);
   $('time-label').textContent = tt < 0.3 ? t('day') : tt < 0.72 ? t('dusk') : t('night');
@@ -1479,6 +1495,7 @@ function animate(now) {
   lastFrame = now;
   updateFlight(now);
   if (cars) cars.update(dt);
+  if (planes) planes.update(dt, now);
   if (night) night.update(now);
   if (controls.enabled) controls.update();
   rebuildInstances();
@@ -1500,7 +1517,7 @@ window.addEventListener('resize', () => {
   if (pois) pois.resize();
 });
 
-window.__app = { scene, camera, renderer, controls, state, houseGroups, proxies, modelInfo, select, flyTo, setOverview, SUN_DIR, MATS, setNight, setTime: (tt) => night && night.setTime(tt), openRegionMap, get night() { return night; }, get cars() { return cars; }, get regionMap() { return regionMap; }, get pois() { return pois; }, get csm() { return csm; }, get composer() { return composer; }, get gtao() { return gtao; } };
+window.__app = { scene, camera, renderer, controls, state, houseGroups, proxies, modelInfo, select, flyTo, setOverview, SUN_DIR, MATS, setNight, setTime: (tt) => night && night.setTime(tt), openRegionMap, get night() { return night; }, get cars() { return cars; }, get regionMap() { return regionMap; }, get pois() { return pois; }, get planes() { return planes; }, get csm() { return csm; }, get composer() { return composer; }, get gtao() { return gtao; } };
 
 init().catch((err) => {
   console.error(err);

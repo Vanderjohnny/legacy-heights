@@ -7,7 +7,7 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 
 const CAR_COLORS = [0x8f2a1e, 0xf2f2f2, 0x1f2a44, 0x8a8f96, 0x2b2b2b, 0xd8d8d8, 0x2d5d8f, 0xe0a94a, 0x4a6b3a, 0xc8b8a0];
 const CAR_MODEL = 'assets/models/car.glb';   // the car chosen in the Blender file (decimated, materials consolidated by tools/... see README)
-const LANE = 1.75;          // metres from the centreline to the middle of the lane
+const LANE = 1.6;           // metres from the centreline to the middle of the lane
 const UP = new THREE.Vector3(0, 1, 0);
 
 export function createCars(ctx) {
@@ -317,7 +317,9 @@ export function createCars(ctx) {
     c.getPointAt(u, _p); c.getTangentAt(u, _t);
     if (car.dir < 0) _t.negate();
     _l.crossVectors(UP, _t).normalize();                 // left of the heading
-    _p.addScaledVector(_l, LANE);
+    let lane = LANE;
+    if (ctx.pavedClass) { while (lane > 0.3 && ctx.pavedClass(_p.x + _l.x * lane, -(_p.z + _l.z * lane)) < 2) lane -= 0.3; }   // never onto the sidewalk
+    _p.addScaledVector(_l, lane);
     car.mesh.position.copy(_p).setY(0.15);
     _look.copy(_p).add(_t);
     car.mesh.lookAt(_look.x, 0.15, _look.z);
@@ -333,11 +335,17 @@ export function createCars(ctx) {
         const s = dir > 0 ? k.getPointAt(0) : k.getPointAt(1);
         const st = k.getTangentAt(dir > 0 ? 0 : 1); if (dir < 0) st.negate();
         const d = s.distanceTo(end);
-        if (d < 30 && st.dot(tan) > -0.2) opts.push({ i, dir, d });
+        if (d < 20 && st.dot(tan) > -0.2 && onAsphalt(end, s)) opts.push({ i, dir, d });
       }
     });
     if (opts.length) { const o = opts[Math.floor(car.rnd() * opts.length)]; car.curve = o.i; car.dir = o.dir; car.u = 0; return; }
     car.curve = Math.floor(car.rnd() * curves.length); car.dir = car.rnd() < 0.5 ? 1 : -1; car.u = 0;
+  }
+  // the straight hop between two curves must stay on the road (a corner cut would cross the sidewalk)
+  function onAsphalt(a, b) {
+    if (!ctx.pavedClass) return true;
+    for (let k = 0.1; k < 1; k += 0.2) { const x = a.x + (b.x - a.x) * k, z = a.z + (b.z - a.z) * k; if (ctx.pavedClass(x, -z) < 2) return false; }
+    return true;
   }
   function update(dt) {
     if (!cars.length) return;

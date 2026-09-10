@@ -19,7 +19,7 @@ for root, _, names in os.walk(DA):
         files[rel] = base64.b64encode(open(p, "rb").read()).decode("ascii")
         mime[rel] = mimetypes.guess_type(p)[0] or "application/octet-stream"
 # data files: always the live ones from the site
-for n in ("site.json", "properties.json", "status.json", "poi.json"):
+for n in ("site.json", "properties.json", "status.json", "poi.json", "airport.json"):
     p = os.path.join(SITE, "data", n)
     if os.path.exists(p): jsons["data/" + n] = json.load(open(p, encoding="utf-8"))
 # floor plans + house photos come from the site's assets when dist/assets has no reduced copy
@@ -44,13 +44,24 @@ IMPORT_RE = re.compile(r"^import [^;]*? from '([^']+)';\s*$", re.M)
 def load_module(name):
     src = open(os.path.join(SITE, "src", name), encoding="utf-8").read().replace("\r\n", "\n")
     ext = [m.group(0).strip() for m in IMPORT_RE.finditer(src) if not m.group(1).startswith("./")]
+    # internal imports: names are shared through the enclosing module scope; keep the "as" aliases as const declarations
+    aliases = []
+    for m in IMPORT_RE.finditer(src):
+        if not m.group(1).startswith("./"): continue
+        spec = re.search(r"import (.*?) from", m.group(0)).group(1).strip().strip("{}")
+        for item in spec.split(","):
+            item = item.strip()
+            if " as " in item:
+                a, b = [x.strip() for x in item.split(" as ")]
+                aliases.append(f"const {b} = {a};")
     src = IMPORT_RE.sub("", src)                       # drop every import (three.js ones are hoisted below)
+    if aliases: src = "\n".join(aliases) + "\n" + src
     exports = re.findall(r"^export (?:const|let|function|async function) ([A-Za-z_$][\w$]*)", src, re.M)
     src = re.sub(r"^export (const|let|function|async function)", r"\1", src, flags=re.M)
     return src, ext, exports
 
 three_imports, parts = [], []
-for name in ("config.js", "api.js", "night.js", "cars.js", "region.js"):
+for name in ("config.js", "api.js", "night.js", "cars.js", "planes.js", "poi.js", "region.js"):
     src, ext, exports = load_module(name)
     for line in ext:
         if line not in three_imports: three_imports.append(line)
