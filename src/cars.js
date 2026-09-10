@@ -241,7 +241,10 @@ export function createCars(ctx) {
     const cone = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 9).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: coneTexture(), transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
     cone.position.set(0, -0.42, 6.8); cone.rotation.y = Math.PI; cone.visible = false; cone.renderOrder = 3;
     car.add(cone);
-    car.userData.cone = cone;
+    const pool = new THREE.Mesh(new THREE.PlaneGeometry(5.5, 7).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: poolTexture(), color: 0xffe6c0, transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending, depthWrite: false }));
+    pool.position.set(0, -0.4, 4.2); pool.visible = false; pool.renderOrder = 3;
+    car.add(pool);
+    car.userData.cone = cone; car.userData.pool = pool;
     return car;
   }
   const glassMat = new THREE.MeshStandardMaterial({ color: 0x141b26, roughness: 0.12, metalness: 0.35, envMapIntensity: 1.2 });
@@ -249,6 +252,16 @@ export function createCars(ctx) {
   const rimMat = new THREE.MeshStandardMaterial({ color: 0xc9ccd1, roughness: 0.35, metalness: 0.8 });
   const lampMat = new THREE.MeshStandardMaterial({ color: 0xe8e8e0, emissive: 0xfff4d6, emissiveIntensity: 0, roughness: 0.3 });
   const tailMat = new THREE.MeshStandardMaterial({ color: 0x7a1414, emissive: 0xff2a1a, emissiveIntensity: 0, roughness: 0.3 });
+  let poolTex = null;
+  function poolTexture() {
+    if (poolTex) return poolTex;
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const cx = c.getContext('2d'); const g = cx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    g.addColorStop(0, 'rgba(255,255,255,0.9)'); g.addColorStop(0.5, 'rgba(255,255,255,0.3)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    cx.fillStyle = g; cx.fillRect(0, 0, 128, 128);
+    poolTex = new THREE.CanvasTexture(c); poolTex.colorSpace = THREE.SRGBColorSpace;
+    return poolTex;
+  }
   let coneTex = null;
   function coneTexture() {
     if (coneTex) return coneTex;
@@ -318,7 +331,10 @@ export function createCars(ctx) {
     if (car.dir < 0) _t.negate();
     _l.crossVectors(UP, _t).normalize();                 // left of the heading
     let lane = LANE;
-    if (ctx.pavedClass) { while (lane > 0.3 && ctx.pavedClass(_p.x + _l.x * lane, -(_p.z + _l.z * lane)) < 2) lane -= 0.3; }   // never onto the sidewalk
+    if (ctx.pavedClass) {   // the car (about 2 m wide) must stay on the asphalt: check its centre and its outer edge
+      const ok = (d) => ctx.pavedClass(_p.x + _l.x * d, -(_p.z + _l.z * d)) >= 2;
+      while (lane > 0.2 && !(ok(lane) && ok(lane + 1.15) && ok(lane + 0.6))) lane -= 0.2;
+    }
     _p.addScaledVector(_l, lane);
     car.mesh.position.copy(_p).setY(0.15);
     _look.copy(_p).add(_t);
@@ -359,9 +375,9 @@ export function createCars(ctx) {
   }
   function setNight(on) {
     night = on;
-    lampMat.emissiveIntensity = on ? 5 : 0;
-    tailMat.emissiveIntensity = on ? 2.5 : 0;
-    for (const car of cars) car.mesh.userData.cone.visible = on;
+    lampMat.emissiveIntensity = on ? 7 : 0;
+    tailMat.emissiveIntensity = on ? 3 : 0;
+    for (const car of cars) { car.mesh.userData.cone.visible = on; if (car.mesh.userData.pool) car.mesh.userData.pool.visible = on; }
   }
   return { build, update, setNight, makeCar, get curves() { return curves; }, get cars() { return cars; }, get group() { return group; } };
 }

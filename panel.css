@@ -153,6 +153,7 @@ body.night .icon-btn { background: rgba(255,255,255,0.12); color: #fff; }
 .poi-card-head .nm { font-family: var(--serif); font-size: 17px; font-weight: 500; line-height: 1.15; }
 .poi-card-head .cat { font-size: 11.5px; color: var(--ink-2); margin-top: 2px; }
 .poi-facts { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin: 12px 0 10px; }
+.poi-facts.two { grid-template-columns: 1fr 1fr; }
 .poi-facts div { background: rgba(16,20,24,0.05); border-radius: 9px; padding: 7px 6px; text-align: center; }
 .poi-facts b { display: block; font-size: 14px; }
 .poi-facts span { font-size: 10.5px; color: var(--ink-2); }

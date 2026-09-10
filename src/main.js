@@ -15,16 +15,16 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // internal modules carry a version query so browsers never pair a new main.js with a cached old module
-import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS } from './config.js?v=10';
-import { api } from './api.js?v=10';
-import { createNight } from './night.js?v=10';
-import { createCars } from './cars.js?v=10';
-import { createRegionMap } from './region.js?v=10';
-import { createPois } from './poi.js?v=10';
-import { createPlanes } from './planes.js?v=10';
+import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS } from './config.js?v=11';
+import { api } from './api.js?v=11';
+import { createNight } from './night.js?v=11';
+import { createCars } from './cars.js?v=11';
+import { createRegionMap } from './region.js?v=11';
+import { createPois } from './poi.js?v=11';
+import { createPlanes } from './planes.js?v=11';
 
 const THREE_VERSION = '0.170.0';
-const ASSET_V = '2026-09-10e';   // bump when models/textures change so browsers do not keep stale copies
+const ASSET_V = '2026-09-10f';   // bump when models/textures change so browsers do not keep stale copies
 const asset = (url) => `${url}${url.includes('?') ? '&' : '?'}v=${ASSET_V}`;
 // Single-file build (tools/build_single_html.py): every asset is embedded as base64 in window.LH_EMBED and nothing is fetched.
 const EMBED = window.LH_EMBED || null;
@@ -416,16 +416,17 @@ async function setupSatellite() {
 // Ground (materials matched by the Blender material name; planar UVs in metres generated at load time)
 // ---------------------------------------------------------------------------
 const MATS = {
-  grass: texturedMaterial({ diff: 'assets/tex/grass_diff.jpg', nor: 'assets/tex/grass_nor.jpg', color: 0xe6efd8, normalScale: 0.5 }),
-  asphalt: texturedMaterial({ diff: 'assets/tex/asphalt_diff.jpg', nor: 'assets/tex/asphalt_nor.jpg', rough: 'assets/tex/asphalt_rough.jpg', color: 0x767472 }),
-  concrete: texturedMaterial({ diff: 'assets/tex/concrete_diff.jpg', nor: 'assets/tex/concrete_nor.jpg', color: 0xf3f1ec, normalScale: 0.35 }),   // light grey concrete (slabs, driveways, sidewalks, curbs)
+  grass: texturedMaterial({ diff: 'assets/tex/grass_diff.jpg', nor: 'assets/tex/grass_nor.jpg', color: 0xb3bf98, normalScale: 0.5 }),   // muted, like the lawns in the imagery around the site
+  asphalt: texturedMaterial({ diff: 'assets/tex/asphalt_diff.jpg', nor: 'assets/tex/asphalt_nor.jpg', rough: 'assets/tex/asphalt_rough.jpg', color: 0x8e8c8a }),
+  concrete: texturedMaterial({ diff: 'assets/tex/concrete_diff.jpg', nor: 'assets/tex/concrete_nor.jpg', color: 0xf3f1ec, normalScale: 0.35 }),   // light concrete: house slabs, entrances, driveways (inside the lots)
+  sidewalk: texturedMaterial({ diff: 'assets/tex/concrete_diff.jpg', nor: 'assets/tex/concrete_nor.jpg', color: 0xbdbab3, normalScale: 0.35 }),   // darker concrete: sidewalks and curbs (outside the lots)
   path: texturedMaterial({ diff: 'assets/tex/concrete_diff.jpg', nor: 'assets/tex/concrete_nor.jpg', color: 0xcdbfa0, normalScale: 0.5 }),
   hedge: texturedMaterial({ diff: 'assets/tex/grass_diff.jpg', nor: 'assets/tex/grass_nor.jpg', color: 0x6a9a52, normalScale: 0.8 }),
   paint: new THREE.MeshStandardMaterial({ color: 0xe9e7df, roughness: 0.8, metalness: 0 }),
   curb: new THREE.MeshStandardMaterial({ color: 0xdedcd6, roughness: 0.92, metalness: 0 }),   // light grey concrete curb
   other: new THREE.MeshStandardMaterial({ color: 0xa8a49b, roughness: 0.9, metalness: 0 }),
 };
-const TILE = new Map([[MATS.grass, 1.6], [MATS.asphalt, 3.2], [MATS.concrete, 1.2], [MATS.path, 1.2], [MATS.hedge, 1.2], [MATS.curb, 1.0]]);
+const TILE = new Map([[MATS.grass, 1.6], [MATS.asphalt, 3.2], [MATS.concrete, 1.2], [MATS.sidewalk, 1.2], [MATS.path, 1.2], [MATS.hedge, 1.2], [MATS.curb, 1.0]]);
 // house surfaces keep their own colours and textures; the PBR sets (Poly Haven, tools/fetch_textures.py) only add a
 // subtle bump and roughness through a second UV set (box-projected in metres, see boxUV)
 const uv1Tex = (url) => { const t = loadTex(url, false); t.channel = 1; return t; };
@@ -454,7 +455,7 @@ function boxUV(geo, tile, swap = false, attr = 'uv1') {
   geo.setAttribute(attr, new THREE.BufferAttribute(uv, 2));
   if (attr === 'uv1' && !geo.attributes.uv) geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
 }
-const PAVED = new Set([MATS.asphalt, MATS.concrete, MATS.path, MATS.curb, MATS.paint]);
+const PAVED = new Set([MATS.asphalt, MATS.concrete, MATS.sidewalk, MATS.path, MATS.curb, MATS.paint]);
 const groundMeshes = [];
 function materialFor(name = '') {
   // Blender names carry the collection as a prefix ("01 - Terreno SKP atual | Legacy Ruas"): match only the material part
@@ -511,7 +512,41 @@ function bakeAndCollect(root) {
   scene.add(group);
   return meshes;
 }
+// 1 m grid of the lots (parks excluded) in Blender XY, used to tell the concrete inside the lots from the sidewalks
+let lotGrid = null;
+function buildLotGrid() {
+  const b = state.data.bounds, x0 = Math.floor(b.min[0]) - 2, y0 = Math.floor(b.min[1]) - 2;
+  const w = Math.ceil(b.max[0] - x0) + 4, h = Math.ceil(b.max[1] - y0) + 4;
+  const grid = new Uint8Array(w * h);
+  for (const l of state.lots) {
+    if (l.park || l.poly.length < 3) continue;
+    for (let gy = Math.max(0, Math.floor(l.miny - y0)); gy <= Math.min(h - 1, Math.ceil(l.maxy - y0)); gy++)
+      for (let gx = Math.max(0, Math.floor(l.minx - x0)); gx <= Math.min(w - 1, Math.ceil(l.maxx - x0)); gx++)
+        if (pointInPoly(gx + x0 + 0.5, gy + y0 + 0.5, l.poly)) grid[gy * w + gx] = 1;
+  }
+  lotGrid = { grid, x0, y0, w, h };
+}
+const inLot = (x, y) => { if (!lotGrid) return false; const gx = Math.floor(x - lotGrid.x0), gy = Math.floor(y - lotGrid.y0); return gx >= 0 && gy >= 0 && gx < lotGrid.w && gy < lotGrid.h && lotGrid.grid[gy * lotGrid.w + gx] === 1; };
+function splitConcrete(o) {
+  const g = o.geometry, p = g.attributes.position, idx = g.index, n = idx ? idx.count : p.count;
+  const I = (t) => (idx ? idx.getX(t) : t);
+  const inside = [], outside = [];
+  for (let t = 0; t < n; t += 3) {
+    const a = I(t), b = I(t + 1), c = I(t + 2);
+    const cx = (p.getX(a) + p.getX(b) + p.getX(c)) / 3, cy = -(p.getZ(a) + p.getZ(b) + p.getZ(c)) / 3;
+    (inLot(cx, cy) ? inside : outside).push(a, b, c);
+  }
+  g.setIndex(inside);
+  const g2 = new THREE.BufferGeometry();
+  for (const [name, attr] of Object.entries(g.attributes)) g2.setAttribute(name, attr);
+  g2.setIndex(outside);
+  const m2 = new THREE.Mesh(g2, MATS.sidewalk);
+  m2.receiveShadow = true; m2.name = '__sidewalks';
+  o.parent.add(m2);
+  groundMeshes.push(m2);
+}
 function setupGround(root) {
+  if (!lotGrid) buildLotGrid();
   for (const o of bakeAndCollect(root)) {
     const mats = Array.isArray(o.material) ? o.material : [o.material];
     const mapped = mats.map((m) => materialFor(m?.name));
@@ -523,6 +558,7 @@ function setupGround(root) {
     o.receiveShadow = true;
     o.castShadow = first === MATS.hedge;
     groundMeshes.push(o);
+    if (first === MATS.concrete && !Array.isArray(o.material)) splitConcrete(o);
   }
 }
 // 1 m occupancy grid of paved surfaces (roads, sidewalks, park paths) in Blender XY, used to keep scattered trees off them
@@ -707,7 +743,7 @@ function setupCurbs(root) {
 // Two detail levels per model: "hi" = every primitive, "lo" = only the large primitives (walls, roof, glass, doors).
 // Instances are re-distributed between the two sets as the camera moves (see rebuildInstances).
 const models = {};           // modelIdx -> { houses, hi: [{im,isFacade}], lo: [{im,isFacade}] }
-const LOD_DIST = 240;        // metres: houses closer than this get the detailed mesh
+const LOD_DIST = IS_TOUCH ? 320 : 520;   // metres: houses closer than this get the detailed mesh (the box proxies only far away)
 function setupHouseModel(modelIdx, root, meta) {
   const houses = state.houses.filter((h) => h.model === modelIdx);
   root.updateMatrixWorld(true);

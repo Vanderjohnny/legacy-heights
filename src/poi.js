@@ -92,7 +92,7 @@ export function createPois(ctx) {
     card.innerHTML = `
       <button class="icon-btn poi-card-close" aria-label="Close">×</button>
       <div class="poi-card-head"><span class="ic" style="background:${c.hex}">${c.icon}</span><div><div class="nm">${esc(p.name)}</div><div class="cat">${esc(catLabel(p))}</div></div></div>
-      <div class="poi-facts"><div><b>${p.drive_min} ${ctx.t('min')}</b><span>${ctx.t('drive')}</span></div><div><b>${p.road_km} km</b><span>${ctx.t('byRoad')}</span></div><div><b>${p.dist_km} km</b><span>${ctx.t('straightLine')}</span></div></div>
+      <div class="poi-facts two"><div><b>${p.drive_min} ${ctx.t('min')}</b><span>${ctx.t('drive')}</span></div><div><b>${p.road_km} km</b><span>${ctx.t('byRoad')}</span></div></div>
       <div class="poi-card-actions"><button class="btn small" id="poi-frame">${ctx.t('showRoute')}</button><button class="btn ghost small" id="poi-map">${ctx.t('map')}</button></div>`;
     card.querySelector('.poi-card-close').onclick = () => select(null);
     card.querySelector('#poi-frame').onclick = () => frame(p);

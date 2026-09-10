@@ -1,7 +1,7 @@
 // Regional map: the georeferenced satellite imagery (assets/map) drawn on a 2D canvas with the points of interest
 // around the site (data/poi.json, OpenStreetMap + OSRM driving routes, see tools/fetch_poi.py).
 // Coordinates are the Blender/site frame (metres, x east, y north), the same frame the 3D scene uses.
-import { POI_CAT as CAT } from './poi.js?v=10';
+import { POI_CAT as CAT } from './poi.js?v=11';
 
 const ORDER = Object.keys(CAT);
 
@@ -127,7 +127,7 @@ export function createRegionMap({ canvas, listEl, meta, loadJson, imageUrl, t, l
     const groups = ORDER.map((k) => ({ k, items: doc.pois.filter((p) => p.cat === k).sort((a, b) => a.drive_min - b.drive_min) })).filter((g) => g.items.length);
     listEl.innerHTML = groups.map((g) => `<div class="map-cat-title">${doc.categories?.[g.k]?.[L] || g.k}</div>` + g.items.map((p) => {
       const c = CAT[p.cat] || { icon: '•', hex: '#888' };
-      return `<div class="poi ${p === selected ? 'active' : ''}" data-id="${p.id}"><span class="ic" style="background:${c.hex}">${c.icon}</span><span><div class="nm">${esc(p.name)}</div><div class="cat">${doc.categories?.[p.cat]?.[L] || p.cat} · ${p.dist_km} km ${t('straightLine')}</div></span><span class="dist"><b>${p.drive_min} ${t('min')}</b>${p.road_km} km</span></div>`;
+      return `<div class="poi ${p === selected ? 'active' : ''}" data-id="${p.id}"><span class="ic" style="background:${c.hex}">${c.icon}</span><span><div class="nm">${esc(p.name)}</div><div class="cat">${doc.categories?.[p.cat]?.[L] || p.cat}</div></span><span class="dist"><b>${p.drive_min} ${t('min')}</b>${p.road_km} km</span></div>`;
     }).join('')).join('');
     listEl.querySelectorAll('.poi').forEach((el) => {
       el.onclick = () => { selectPoi(doc.pois.find((p) => p.id === el.dataset.id), true); };
