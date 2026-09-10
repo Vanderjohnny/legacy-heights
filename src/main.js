@@ -1005,22 +1005,38 @@ async function buildTrees(data) {
   if (!paved) buildPavedGrid();
   const extra = scatterParkTrees(data);
   state.parkTrees = extra.length; state.parkTreeList = extra;
-  // drop the modelled trees that stand inside a house footprint (with a 2.2 m margin) or on the road
+  // modelled trees standing inside a house footprint (2 m clearance from the walls) are pushed out of the house along
+  // the shortest way; a tree that then falls outside its lot or on the road is dropped
   const _tp = new THREE.Vector3(), _inv = new THREE.Matrix4();
-  const insideHouse = (x, y) => {
+  const CLEAR = 2.0;
+  const houseHit = (x, y) => {
     const lot = lotAt(x, y); const h = lot && state.lotByHouse.get(lot.id);
     const cands = h ? [h] : state.houses.filter((hh) => Math.abs(hh.pos[0] - x) < 16 && Math.abs(hh.pos[1] - y) < 16);
     for (const hh of cands) {
       const info = modelInfo[hh.model]; if (!info) continue;
       _tp.set(x, 1, -y).applyMatrix4(_inv.copy(hh.matrix).invert());
-      const hx = info.size.x / 2 + 2.2, hz = info.size.z / 2 + 2.2;   // crowns are ~3 m wide: keep the trunks clear of the walls
-      if (Math.abs(_tp.x - info.center.x) < hx && Math.abs(_tp.z - info.center.z) < hz) return true;
+      const hx = info.size.x / 2 + CLEAR, hz = info.size.z / 2 + CLEAR;
+      if (Math.abs(_tp.x - info.center.x) < hx && Math.abs(_tp.z - info.center.z) < hz) return { hh, info, local: _tp.clone(), hx, hz };
     }
-    return false;
+    return null;
   };
-  let dropped = 0;
-  const kept = data.trees.filter((tr) => { const bad = insideHouse(tr.p[0], tr.p[1]) || pavedClass(tr.p[0], tr.p[1]) >= 2; if (bad) dropped++; return !bad; });
-  state.treesDropped = dropped;
+  let moved = 0, dropped = 0;
+  const kept = [];
+  for (const tr of data.trees) {
+    let x = tr.p[0], y = tr.p[1], hit = houseHit(x, y), wasHit = !!hit;
+    for (let iter = 0; iter < 3 && hit; iter++) {
+      const { hh, info, local, hx, hz } = hit;
+      const dx = local.x - info.center.x, dz = local.z - info.center.z;
+      if (hx - Math.abs(dx) < hz - Math.abs(dz)) local.x = info.center.x + (dx < 0 ? -1 : 1) * (hx + 0.2); else local.z = info.center.z + (dz < 0 ? -1 : 1) * (hz + 0.2);
+      local.applyMatrix4(hh.matrix); x = local.x; y = -local.z;
+      hit = houseHit(x, y);
+    }
+    const lot = lotAt(x, y);
+    if (hit || pavedClass(x, y) >= 2 || (wasHit && !(lot && (lot.park || inLot(x, y))))) { dropped++; continue; }
+    if (wasHit) moved++;
+    kept.push(wasHit ? { ...tr, p: [+x.toFixed(2), +y.toFixed(2), tr.p[2]] } : tr);
+  }
+  state.treesDropped = dropped; state.treesMoved = moved;
   kept.concat(extra).forEach((tr) => groups[tr.s]?.items.push(tr));
   const tmp = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3(), ax = new THREE.Vector3(0, 1, 0);
   for (const g of groups) {
