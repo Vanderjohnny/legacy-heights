@@ -42,7 +42,7 @@ export function imageFor(kind, color) {
 // Commercial backend (Google Apps Script web app, see tools/backend/README.md). Leave empty to run in read-only mode:
 // statuses come from data/status.json and the sales actions fall back to e-mail links.
 export const BACKEND = {
-  url: '',                                   // e.g. 'https://script.google.com/macros/s/AKfy.../exec'
+  url: 'https://script.google.com/macros/s/AKfycbw23Cq6ydevs46OdIZ2oGYTb-NmAEEEufFlKyvDxpnLeV5Bb_VFQYDdl5YfU9zNPZA9HQ/exec',   // Apps Script web app 'Legacy Heights Sales' (deployed 2026-09-10)
   salesEmail: 'sales@unk.group',             // recipient of the "I'm interested" leads (also used by the mailto fallback)
   pollSeconds: 45,                           // how often visitors refresh the property statuses
 };

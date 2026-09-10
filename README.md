@@ -76,7 +76,8 @@ backend, the deep links (`#p-<hex>-1`) and the status sheet use these ids. 967 u
 `tools/backend/Code.gs` is a Google Apps Script web app bound to a Google Sheet; `tools/backend/README.md` has the
 10-minute deployment. It is the only place the passwords live (script properties) and the only writer of the status
 sheet; two simultaneous reservations are serialised by a script lock, the second one is refused. The site talks to it
-through `src/api.js`; set `BACKEND.url` in `src/config.js` to the deployed `/exec` URL and bump the `?v=` versions.
+through `src/api.js` (`BACKEND.url` in `src/config.js` points at the deployment of 2026-09-10; the sheet is
+*Legacy Heights - Vendas* on the client's Google account).
 Without a backend URL the page runs **read-only**: statuses come from `data/status.json` (edit that file to publish a
 status by hand) and the lead form falls back to a pre-filled e-mail to `BACKEND.salesEmail`.
 `tools/backend/test_backend.py <url>` runs the happy, failure and concurrency tests against any deployment (18 checks).

@@ -27,15 +27,27 @@ if not args.pid:
 else:
     CODE = 'TEST'
 
+def _retry(fn, tries=4):
+    # the Apps Script answer is served through a googleusercontent redirect that occasionally 404s: retry a few times
+    for i in range(tries):
+        try: return fn()
+        except Exception as e:
+            if i == tries - 1: raise
+            time.sleep(1.5 * (i + 1))
+
 def post(payload):
-    r = requests.post(URL, data=json.dumps(payload), headers={'Content-Type': 'text/plain;charset=utf-8'}, timeout=60, allow_redirects=True)
-    r.raise_for_status()
-    return r.json()
+    def go():
+        r = requests.post(URL, data=json.dumps(payload), headers={'Content-Type': 'text/plain;charset=utf-8'}, timeout=60, allow_redirects=True)
+        r.raise_for_status()
+        return r.json()
+    return _retry(go)
 
 def get_statuses():
-    r = requests.get(f'{URL}?action=statuses&t={int(time.time() * 1000)}', timeout=60)
-    r.raise_for_status()
-    return r.json()['statuses']
+    def go():
+        r = requests.get(f'{URL}?action=statuses&t={int(time.time() * 1000)}', timeout=60)
+        r.raise_for_status()
+        return r.json()['statuses']
+    return _retry(go)
 
 results = []
 def check(name, cond, detail=''):

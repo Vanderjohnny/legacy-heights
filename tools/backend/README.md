@@ -1,5 +1,9 @@
 # Legacy Heights — sales backend (Google Apps Script)
 
+**Deployed on 2026-09-10.** Sheet: *Legacy Heights - Vendas* (https://docs.google.com/spreadsheets/d/1wRDb_w3OYBIOkZGBAqLkqmvOWeoV8xB-hfBJ7kvOG-k),
+Apps Script project *Legacy Heights Sales* (Extensions > Apps Script from that sheet), web app URL in `src/config.js`
+(`BACKEND.url`). The sales password is the `RESERVE_PASSWORD` script property (it serves reserve, sold and release).
+
 The commercial status of each property (AVAILABLE / RESERVED / SOLD), the change log and the leads live in a
 Google Sheet. `Code.gs` is a small web app bound to that sheet; the website calls it through `src/api.js`.
 Passwords are **script properties** of the Apps Script project: they are never written in the website code.
