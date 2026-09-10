@@ -68,6 +68,22 @@ def want(path):
     return not n.endswith(SKIP_SUFFIXES) and not n.startswith(".")
 
 
+_seen_dirs = set()
+def add_dir(z, name):
+    if name in _seen_dirs: return
+    _seen_dirs.add(name)
+    zi = zipfile.ZipInfo(name + "/", date_time=time.localtime()[:6])
+    zi.external_attr = (0o040755 << 16) | 0x10
+    z.writestr(zi, b"")
+
+
+def add_file(z, name, data, mtime=None):
+    zi = zipfile.ZipInfo(name, date_time=time.localtime(mtime)[:6])
+    zi.compress_type = zipfile.ZIP_DEFLATED
+    zi.external_attr = 0o100644 << 16
+    z.writestr(zi, data)
+
+
 def main():
     os.makedirs(DIST, exist_ok=True)
     files = []
@@ -84,12 +100,17 @@ def main():
         h.update(rel.encode()); h.update(open(p, "rb").read())
     version = f"{STAMP} {h.hexdigest()[:10]}"
     total = 0
+    # explicit Unix permissions (644 files, 755 folders): zips made on Windows carry none, and cPanel then extracts
+    # generated entries as 0600 - an unreadable .htaccess makes Apache answer 403 for every URL
     with zipfile.ZipFile(OUT, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+        for d in sorted({os.path.dirname(rel) for _, rel in files if "/" in rel}):
+            parts = d.split("/")
+            for k in range(1, len(parts) + 1): add_dir(z, "/".join(parts[:k]))
         for p, rel in files:
-            z.write(p, rel); total += os.path.getsize(p)
-        z.writestr(".htaccess", HTACCESS)
-        z.writestr("VERSION.txt", version + "\n")
-        z.writestr("LEIA-ME.txt", LEIAME.format(stamp=version))
+            add_file(z, rel, open(p, "rb").read(), os.path.getmtime(p)); total += os.path.getsize(p)
+        add_file(z, ".htaccess", HTACCESS.encode("utf-8"))
+        add_file(z, "VERSION.txt", (version + "\n").encode("utf-8"))
+        add_file(z, "LEIA-ME.txt", LEIAME.format(stamp=version).encode("utf-8"))
     print(f"written {OUT}\n  {len(files)} files, {total / 1048576:.1f} MB uncompressed, zip {os.path.getsize(OUT) / 1048576:.1f} MB, version {version}")
     return 0
 

@@ -1,7 +1,7 @@
 // Regional map: the georeferenced satellite imagery (assets/map) drawn on a 2D canvas with the points of interest
 // around the site (data/poi.json, OpenStreetMap + OSRM driving routes, see tools/fetch_poi.py).
 // Coordinates are the Blender/site frame (metres, x east, y north), the same frame the 3D scene uses.
-import { POI_CAT as CAT } from './poi.js?v=19';
+import { POI_CAT as CAT } from './poi.js?v=20';
 
 const ORDER = Object.keys(CAT);
 

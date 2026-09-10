@@ -15,13 +15,13 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // internal modules carry a version query so browsers never pair a new main.js with a cached old module
-import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW } from './config.js?v=19';
-import { api } from './api.js?v=19';
-import { createNight } from './night.js?v=19';
-import { createCars } from './cars.js?v=19';
-import { createRegionMap } from './region.js?v=19';
-import { createPois } from './poi.js?v=19';
-import { createPlanes } from './planes.js?v=19';
+import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW } from './config.js?v=20';
+import { api } from './api.js?v=20';
+import { createNight } from './night.js?v=20';
+import { createCars } from './cars.js?v=20';
+import { createRegionMap } from './region.js?v=20';
+import { createPois } from './poi.js?v=20';
+import { createPlanes } from './planes.js?v=20';
 
 const THREE_VERSION = '0.170.0';
 const ASSET_V = '2026-09-10m';   // bump when models/textures change so browsers do not keep stale copies
@@ -47,7 +47,7 @@ const DRACO_PATH = `https://cdn.jsdelivr.net/npm/three@${THREE_VERSION}/examples
 // State
 // ---------------------------------------------------------------------------
 const state = {
-  lang: (navigator.language || 'en').toLowerCase().startsWith('pt') ? 'pt' : 'en',
+  lang: 'en',           // English only on the public site (the PT strings stay in config.js; no toggle in the UI)
   data: null,
   houses: [],           // enriched house records
   lots: [],             // lot records with polygons (Blender XY)
@@ -802,7 +802,8 @@ function setupCurbs(root) {
 // Two detail levels per model: "hi" = every primitive, "lo" = only the large primitives (walls, roof, glass, doors).
 // Instances are re-distributed between the two sets as the camera moves (see rebuildInstances).
 const models = {};           // modelIdx -> { houses, hi: [{im,isFacade}], lo: [{im,isFacade}] }
-const LOD_DIST = IS_TOUCH ? 320 : 520;   // metres: houses closer than this get the detailed mesh (the box proxies only far away)
+let LOD_DIST = IS_TOUCH ? 900 : 3000;  // metres: houses closer than this get the detailed mesh (~3k triangles each, 1.7 M for all 605);
+                                       // the 24-triangle boxes only far away (the user wants complete houses everywhere near the camera)
 function setupHouseModel(modelIdx, root, meta) {
   const houses = state.houses.filter((h) => h.model === modelIdx);
   root.updateMatrixWorld(true);
@@ -1325,7 +1326,7 @@ function setupUI() {
   $('btn-colortype').onclick = () => { state.colorByType = !state.colorByType; $('btn-colortype').classList.toggle('active', state.colorByType); refreshFacadeColors(); };
   $('btn-ao').classList.toggle('active', state.ao);
   $('btn-ao').onclick = () => { state.ao = !state.ao; $('btn-ao').classList.toggle('active', state.ao); };
-  $('btn-lang').onclick = () => { state.lang = state.lang === 'en' ? 'pt' : 'en'; applyI18n(); if (state.selected) renderPanel(state.selected); };
+  if ($('btn-lang')) $('btn-lang').onclick = () => { state.lang = state.lang === 'en' ? 'pt' : 'en'; applyI18n(); if (state.selected) renderPanel(state.selected); };
   $('panel-close').onclick = () => clearSelection();
   $('panel-fly').onclick = () => state.selected && flyToHouse(state.selected);
   $('panel-prev').onclick = () => step(-1);
@@ -1447,7 +1448,7 @@ function applyI18n() {
   document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll('[data-i18n-ph]').forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
   document.querySelectorAll('[data-i18n-title]').forEach((el) => { el.title = t(el.dataset.i18nTitle); });
-  $('btn-lang').textContent = state.lang === 'en' ? 'PT' : 'EN';
+  if ($('btn-lang')) $('btn-lang').textContent = state.lang === 'en' ? 'PT' : 'EN';
   $('btn-night').textContent = state.night ? t('day') : t('night');
   document.documentElement.lang = state.lang === 'pt' ? 'pt-BR' : 'en';
   buildLegend();
@@ -1665,7 +1666,7 @@ window.addEventListener('resize', () => {
   if (pois) pois.resize();
 });
 
-window.__app = { scene, camera, renderer, controls, state, unitAt, unitOfHouseAt, houseGroups, proxies, modelInfo, select, flyTo, setOverview, SUN_DIR, MATS, setNight, setTime: (tt) => night && night.setTime(tt), openRegionMap, get night() { return night; }, get cars() { return cars; }, get regionMap() { return regionMap; }, get pois() { return pois; }, get planes() { return planes; }, get csm() { return csm; }, get composer() { return composer; }, get gtao() { return gtao; } };
+window.__app = { setLod: (d) => { LOD_DIST = d; rebuildInstances(true); return LOD_DIST; }, get lodDist() { return LOD_DIST; }, models, scene, camera, renderer, controls, state, unitAt, unitOfHouseAt, houseGroups, proxies, modelInfo, select, flyTo, setOverview, SUN_DIR, MATS, setNight, setTime: (tt) => night && night.setTime(tt), openRegionMap, get night() { return night; }, get cars() { return cars; }, get regionMap() { return regionMap; }, get pois() { return pois; }, get planes() { return planes; }, get csm() { return csm; }, get composer() { return composer; }, get gtao() { return gtao; } };
 
 init().catch((err) => {
   console.error(err);

@@ -64,7 +64,7 @@ h1, h2, h3, p { margin: 0; }
 /* developer logo: its own card right below the legend (the legend is fixed, so the absolute child hangs from it) */
 #unk-link { position: absolute; left: 0; right: 0; top: calc(100% + 10px); height: 54px; display: flex; align-items: center; justify-content: center; background: var(--paper); backdrop-filter: blur(14px); border-radius: var(--radius); box-shadow: var(--shadow); text-decoration: none; }
 #unk-link:hover .unk-logo { opacity: 0.65; }
-.unk-logo { display: block; height: 34px; width: auto; transition: opacity 0.15s; user-select: none; -webkit-user-drag: none; }
+.unk-logo { display: block; height: 36px; width: auto; transition: opacity 0.15s; user-select: none; -webkit-user-drag: none; }
 .chip { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 8px; width: 100%; padding: 7px 10px; border: 0; border-radius: 10px; background: transparent; text-align: left; cursor: pointer; transition: background 0.12s ease, opacity 0.12s ease; }
 .chip:hover { background: rgba(16,20,24,0.06); }
 .chip.off { opacity: 0.4; }
@@ -132,7 +132,7 @@ h1, h2, h3, p { margin: 0; }
   #btn-ao { display: none; }
   #legend { left: 8px; right: 8px; bottom: 8px; width: auto; padding: 6px 8px; border-radius: 12px; }
   #unk-link { position: static; height: auto; background: none; box-shadow: none; backdrop-filter: none; border-radius: 0; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
-  .unk-logo { height: 18px; }
+  .unk-logo { height: 20px; }
   #legend h2 { display: none; }
   #legend-items { flex-direction: row; flex-wrap: wrap; gap: 4px; }
   .chip { grid-template-columns: auto 1fr auto; gap: 6px; width: auto; flex: 1 1 44%; padding: 5px 8px; border-radius: 8px; }

@@ -44,7 +44,10 @@ Any other static server works for the read-only site (`python -m http.server 517
   `tools/blender_export_car.py`; the paint colour is randomised per car. If the GLB is missing the site falls back to
   a lofted low-poly hatchback built in `src/cars.js`.
 - **Branding**: the header and the loading card show the Legacy Heights logotype (`assets/logo.png`, black ink on a
-  transparent background, inverted by CSS at night) above the address line.
+  transparent background, inverted by CSS at night) above the address line; a "Powered by UNK.GROUP" card below the
+  legend (`assets/unk.png`) links to https://unk.group.
+- **Language**: the public site is English only (`state.lang = 'en'`, no toggle); the Portuguese strings remain in
+  `src/config.js` for a future switch.
 - **Materials**: the ground uses PBR texture sets (Poly Haven, CC0, `tools/fetch_textures.py`: grass, asphalt,
   concrete). The houses keep their original colours and textures; a subtle plaster bump + roughness (facades), a
   corrugated-metal normal map across the ridge (roofs) and a concrete grain (base) are added through a second UV set
