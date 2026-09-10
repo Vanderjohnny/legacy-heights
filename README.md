@@ -30,7 +30,16 @@ Any other static server works for the read-only site (`python -m http.server 517
   image-based light, fog, exposure). After dusk ~245 streetlights come on (placed lot by lot along the street fronts,
   never in front of a driveway), with light pools and real point lights near the camera, and ~45 % of the houses show
   lit windows.
-- **Cars**: seven slow cars drive on the left along the road centrelines (extracted from the dashed road paint).
+- **Cars**: seven slow cars drive on the left along the road centrelines (extracted from the dashed road paint), with
+  headlights and light cones at night. The body is `assets/models/car.glb`: the Audi A7 chosen in the Blender file,
+  decimated to ~52k triangles and its ~60 materials consolidated into 9 (Paint, Glass, Lights, TailLight, Chrome, Rim,
+  Black, Grey, Tyre) by the export script kept in `tools/blender_export_car.py`; the paint colour is randomised per car.
+  If the GLB is missing the site falls back to a lofted low-poly hatchback built in `src/cars.js`.
+- **Materials**: the ground uses PBR texture sets (Poly Haven, CC0, `tools/fetch_textures.py`: grass, asphalt,
+  concrete). The houses keep their original colours and textures; a subtle plaster bump + roughness (facades), a
+  corrugated-metal normal map across the ridge (roofs) and a concrete grain (base) are added through a second UV set
+  box-projected in metres at load. At night the neighbouring areas show ~9,800 light points sampled from the bright,
+  low-saturation pixels of the satellite imagery (roofs and roads), excluding the site and the sea.
 - **Points of interest**: 53 places (airport emphasised, supermarkets, restaurants, hospitals/clinics, schools,
   pharmacies, parks, beaches) drawn as dots in the main 3D map; clicking one draws its driving route along the streets
   (OSRM geometry) with road distance and time, and frames it. The **Region** button opens the same places on a 2D

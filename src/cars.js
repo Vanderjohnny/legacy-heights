@@ -3,8 +3,10 @@
 // into polylines and turned into smooth curves. Cars keep to the LEFT of the centreline (Barbados drives on the left).
 // The car body is a smooth lofted hatchback (cross sections along the length, shared vertices -> rounded shading).
 import * as THREE from 'three';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 
-const CAR_COLORS = [0x8f2a1e, 0xf2f2f2, 0x1f2a44, 0x8a8f96, 0x2b2b2b, 0xd8d8d8, 0x2d5d8f, 0xe0a94a];
+const CAR_COLORS = [0x8f2a1e, 0xf2f2f2, 0x1f2a44, 0x8a8f96, 0x2b2b2b, 0xd8d8d8, 0x2d5d8f, 0xe0a94a, 0x4a6b3a, 0xc8b8a0];
+const CAR_MODEL = 'assets/models/car.glb';   // the car chosen in the Blender file (decimated, materials consolidated by tools/... see README)
 const LANE = 1.75;          // metres from the centreline to the middle of the lane
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -153,6 +155,95 @@ export function createCars(ctx) {
     { z: -1.2, pts: [[0, 1.36], [0.69, 1.36], [0.73, 1.38], [0, 1.385]] }, { z: -1.45, pts: [[0, 1.26], [0.64, 1.26], [0.68, 1.28], [0, 1.285]] },
   ];
   let bodyGeo = null, glassGeo = null, roofGeo = null;
+  let template = null;   // { parts: [{ geo, mat, name }], box }
+  async function loadTemplate() {
+    if (!ctx.loadGLB) return null;
+    try {
+      const gltf = await ctx.loadGLB(CAR_MODEL);
+      const root = gltf.scene; root.updateMatrixWorld(true);
+      const byMat = new Map();
+      root.traverse((o) => {
+        if (!o.isMesh) return;
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        const g = o.geometry.clone();
+        for (const name of ['normal', 'position', 'uv']) { const a = g.attributes[name]; if (a && !(a.array instanceof Float32Array)) { const out = new Float32Array(a.count * a.itemSize); for (let i = 0; i < a.count; i++) for (let k = 0; k < a.itemSize; k++) out[i * a.itemSize + k] = a.getComponent(i, k); g.setAttribute(name, new THREE.BufferAttribute(out, a.itemSize)); } }
+        g.applyMatrix4(o.matrixWorld);
+        const groups = g.groups.length ? g.groups : [{ start: 0, count: g.index ? g.index.count : g.attributes.position.count, materialIndex: 0 }];
+        for (const gr of groups) {
+          const m = mats[gr.materialIndex] || mats[0];
+          const key = (m.name || 'mat').replace(/^CAR_/, '');
+          const part = new THREE.BufferGeometry();
+          for (const [name, attr] of Object.entries(g.attributes)) part.setAttribute(name, attr);
+          if (g.index) part.setIndex(g.index);
+          part.setDrawRange(gr.start, gr.count);
+          // bake the draw range into a standalone geometry
+          const sub = part.toNonIndexed ? bakeRange(g, gr) : part;
+          if (!byMat.has(key)) byMat.set(key, { geos: [], mat: m });
+          byMat.get(key).geos.push(sub);
+        }
+      });
+      const parts = [];
+      for (const [name, e] of byMat) {
+        const geo = e.geos.length === 1 ? e.geos[0] : BufferGeometryUtils.mergeGeometries(e.geos, false);
+        if (!geo) continue;
+        parts.push({ name, geo, mat: e.mat });
+      }
+      const box = new THREE.Box3();
+      for (const pt of parts) { pt.geo.computeBoundingBox(); box.union(pt.geo.boundingBox); }
+      return { parts, box };
+    } catch (e) { console.warn('car model not available, using the built-in body', e); return null; }
+  }
+  // copies the triangles of one material group into its own non-indexed geometry
+  function bakeRange(g, gr) {
+    const idx = g.index, pos = g.attributes.position, nor = g.attributes.normal;
+    const n = gr.count, P = new Float32Array(n * 3), N = nor ? new Float32Array(n * 3) : null;
+    for (let i = 0; i < n; i++) {
+      const vi = idx ? idx.getX(gr.start + i) : gr.start + i;
+      P[i * 3] = pos.getX(vi); P[i * 3 + 1] = pos.getY(vi); P[i * 3 + 2] = pos.getZ(vi);
+      if (N) { N[i * 3] = nor.getX(vi); N[i * 3 + 1] = nor.getY(vi); N[i * 3 + 2] = nor.getZ(vi); }
+    }
+    const out = new THREE.BufferGeometry();
+    out.setAttribute('position', new THREE.BufferAttribute(P, 3));
+    if (N) out.setAttribute('normal', new THREE.BufferAttribute(N, 3)); else out.computeVertexNormals();
+    return out;
+  }
+  const MODEL_MATS = {};   // shared materials of the model (glass, chrome, lights...), the paint is per car
+  function modelMaterial(name, src) {
+    if (MODEL_MATS[name]) return MODEL_MATS[name];
+    let m;
+    switch (name) {
+      case 'Glass': m = new THREE.MeshPhysicalMaterial({ color: 0x1a2430, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.5, envMapIntensity: 1.3, depthWrite: false }); break;
+      case 'Lights': m = lampMat; break;
+      case 'TailLight': m = tailMat; break;
+      case 'Chrome': m = new THREE.MeshStandardMaterial({ color: 0xd8d8d8, roughness: 0.15, metalness: 1.0, envMapIntensity: 1.2 }); break;
+      case 'Rim': m = rimMat; break;
+      case 'Tyre': m = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.92, metalness: 0 }); break;
+      case 'Grey': m = new THREE.MeshStandardMaterial({ color: 0x3a3d40, roughness: 0.5, metalness: 0.2 }); break;
+      case 'Black': m = darkMat; break;
+      default: m = src ? src.clone() : darkMat;
+    }
+    MODEL_MATS[name] = m;
+    return m;
+  }
+  function makeModelCar(color) {
+    const car = new THREE.Group();
+    const inner = new THREE.Group();
+    inner.rotation.y = Math.PI / 2;            // Blender: length along X, front at -X  ->  site: front at +Z
+    const paint = new THREE.MeshStandardMaterial({ color, roughness: 0.28, metalness: 0.55, envMapIntensity: 1.2 });
+    for (const pt of template.parts) {
+      const m = new THREE.Mesh(pt.geo, pt.name === 'Paint' ? paint : modelMaterial(pt.name, pt.mat));
+      m.castShadow = pt.name !== 'Glass'; m.receiveShadow = false;
+      if (pt.name === 'Glass') m.renderOrder = 2;
+      inner.add(m);
+    }
+    inner.position.y = -template.box.min.y;    // wheels on the ground
+    car.add(inner);
+    const cone = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 9).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: coneTexture(), transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
+    cone.position.set(0, -0.42, 6.8); cone.rotation.y = Math.PI; cone.visible = false; cone.renderOrder = 3;
+    car.add(cone);
+    car.userData.cone = cone;
+    return car;
+  }
   const glassMat = new THREE.MeshStandardMaterial({ color: 0x141b26, roughness: 0.12, metalness: 0.35, envMapIntensity: 1.2 });
   const darkMat = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.9 });
   const rimMat = new THREE.MeshStandardMaterial({ color: 0xc9ccd1, roughness: 0.35, metalness: 0.8 });
@@ -201,7 +292,8 @@ export function createCars(ctx) {
     return car;
   }
 
-  function build() {
+  async function build() {
+    template = await loadTemplate();
     const dashes = extractDashes(ctx.paintGeometries || []);
     const lines = chain(dashes);
     curves = lines.map((pts) => { const c = new THREE.CatmullRomCurve3(pts, false, 'centripetal', 0.3); c.arcLengthDivisions = Math.max(50, pts.length * 4); c.len = c.getLength(); return c; }).filter((c) => c.len > 25);
@@ -210,13 +302,13 @@ export function createCars(ctx) {
     const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
     const byLen = curves.map((c, i) => i).sort((a, b) => curves[b].len - curves[a].len);
     for (let i = 0; i < n; i++) {
-      const mesh = makeCar(CAR_COLORS[i % CAR_COLORS.length]);
+      const mesh = template ? makeModelCar(CAR_COLORS[Math.floor(rnd() * CAR_COLORS.length)]) : makeCar(CAR_COLORS[i % CAR_COLORS.length]);
       const ci = byLen[i % byLen.length];
       const car = { mesh, curve: ci, u: rnd() * 0.8, dir: rnd() < 0.5 ? 1 : -1, speed: 5.5 + rnd() * 2.5, rnd };
       cars.push(car); group.add(mesh);
       place(car);
     }
-    return { dashes: dashes.length, lines: lines.length, curves: curves.length, metres: Math.round(curves.reduce((s, c) => s + c.len, 0)) };
+    return { dashes: dashes.length, lines: lines.length, curves: curves.length, metres: Math.round(curves.reduce((s, c) => s + c.len, 0)), model: !!template, parts: template ? template.parts.map((p) => p.name) : [] };
   }
   const _p = new THREE.Vector3(), _t = new THREE.Vector3(), _l = new THREE.Vector3(), _look = new THREE.Vector3();
   function place(car) {

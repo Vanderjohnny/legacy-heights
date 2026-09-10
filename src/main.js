@@ -15,15 +15,15 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // internal modules carry a version query so browsers never pair a new main.js with a cached old module
-import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS } from './config.js?v=8';
-import { api } from './api.js?v=8';
-import { createNight } from './night.js?v=8';
-import { createCars } from './cars.js?v=8';
-import { createRegionMap } from './region.js?v=8';
-import { createPois } from './poi.js?v=8';
+import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS } from './config.js?v=9';
+import { api } from './api.js?v=9';
+import { createNight } from './night.js?v=9';
+import { createCars } from './cars.js?v=9';
+import { createRegionMap } from './region.js?v=9';
+import { createPois } from './poi.js?v=9';
 
 const THREE_VERSION = '0.170.0';
-const ASSET_V = '2026-09-10c';   // bump when models/textures change so browsers do not keep stale copies
+const ASSET_V = '2026-09-10d';   // bump when models/textures change so browsers do not keep stale copies
 const asset = (url) => `${url}${url.includes('?') ? '&' : '?'}v=${ASSET_V}`;
 // Single-file build (tools/build_single_html.py): every asset is embedded as base64 in window.LH_EMBED and nothing is fetched.
 const EMBED = window.LH_EMBED || null;
@@ -287,8 +287,8 @@ async function init() {
   await buildTrees(data);
   night = createNight({ scene, renderer, camera, controls, getCsm: () => csm, hemi, treeGroup, worldGround, satMeshes, HORIZON, pmrem, isTouch: IS_TOUCH, lots: state.lots, lotByHouse: state.lotByHouse, pavedClass, models, rebuildInstances, sunDir: SUN_DIR, onTime, siteBounds: state.data.bounds });
   night.build();
-  cars = createCars({ scene, paintGeometries: groundMeshes.filter((o) => (Array.isArray(o.material) ? o.material[0] : o.material) === MATS.paint).map((o) => o.geometry), isTouch: IS_TOUCH });
-  state.carReport = cars.build();
+  cars = createCars({ scene, loadGLB, paintGeometries: groundMeshes.filter((o) => (Array.isArray(o.material) ? o.material[0] : o.material) === MATS.paint).map((o) => o.geometry), isTouch: IS_TOUCH });
+  state.carReport = await cars.build();
   applyShading();
   setupPost();
   applyFilter();
@@ -420,17 +420,20 @@ const MATS = {
   other: new THREE.MeshStandardMaterial({ color: 0xa8a49b, roughness: 0.9, metalness: 0 }),
 };
 const TILE = new Map([[MATS.grass, 1.6], [MATS.asphalt, 3.2], [MATS.concrete, 1.2], [MATS.path, 1.2], [MATS.hedge, 1.2], [MATS.curb, 1.0]]);
-// house materials: painted plaster (tinted per house through the instance colour), corrugated metal roof, concrete base
-const HOUSE_MATS = {
-  plaster: texturedMaterial({ diff: 'assets/tex/plaster_diff.jpg', nor: 'assets/tex/plaster_nor.jpg', rough: 'assets/tex/plaster_rough.jpg', color: 0xffffff, normalScale: 0.55 }),
-  roof: texturedMaterial({ diff: 'assets/tex/metalroof_diff.jpg', nor: 'assets/tex/metalroof_nor.jpg', rough: 'assets/tex/metalroof_rough.jpg', color: 0xaab0b6, normalScale: 0.9 }),
-  concrete: texturedMaterial({ diff: 'assets/tex/concrete_diff.jpg', nor: 'assets/tex/concrete_nor.jpg', color: 0xcfcbc2, normalScale: 0.5 }),
+// house surfaces keep their own colours and textures; the PBR sets (Poly Haven, tools/fetch_textures.py) only add a
+// subtle bump and roughness through a second UV set (box-projected in metres, see boxUV)
+const uv1Tex = (url) => { const t = loadTex(url, false); t.channel = 1; return t; };
+const HOUSE_TEX = {
+  plasterNor: uv1Tex('assets/tex/plaster_nor.jpg'), plasterRough: uv1Tex('assets/tex/plaster_rough.jpg'),
+  roofNor: uv1Tex('assets/tex/metalroof_nor.jpg'), roofRough: uv1Tex('assets/tex/metalroof_rough.jpg'),
+  concreteNor: uv1Tex('assets/tex/concrete_nor.jpg'),
 };
-HOUSE_MATS.plaster.color.set(0xfaf8f4);   // the plaster photo is normalised to ~90 % grey so the facade colours stay true
-HOUSE_MATS.roof.metalness = 0.55;
-HOUSE_MATS.roof.envMapIntensity = 0.7;
-// UVs by projecting each vertex along its dominant normal axis (walls: horizontal + height, roof/floor: plan), in metres
-function boxUV(geo, tile) {
+const HOUSE_MATS = {
+  plaster: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0, normalMap: HOUSE_TEX.plasterNor, normalScale: new THREE.Vector2(0.35, 0.35), roughnessMap: HOUSE_TEX.plasterRough }),
+};
+// second UV set by projecting each vertex along its dominant normal axis (walls: horizontal + height, roof/floor: plan),
+// in metres; swap = rotate the pattern 90 degrees (roof ribs run down the slope, across the ridge)
+function boxUV(geo, tile, swap = false) {
   const p = geo.attributes.position, n = geo.attributes.normal, uv = new Float32Array(p.count * 2);
   for (let i = 0; i < p.count; i++) {
     const nx = Math.abs(n.getX(i)), ny = Math.abs(n.getY(i)), nz = Math.abs(n.getZ(i));
@@ -438,9 +441,11 @@ function boxUV(geo, tile) {
     if (ny >= nx && ny >= nz) { u = p.getX(i); v = p.getZ(i); }
     else if (nx >= nz) { u = p.getZ(i); v = p.getY(i); }
     else { u = p.getX(i); v = p.getY(i); }
+    if (swap) { const w = u; u = v; v = w; }
     uv[i * 2] = u / tile; uv[i * 2 + 1] = v / tile;
   }
-  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  geo.setAttribute('uv1', new THREE.BufferAttribute(uv, 2));
+  if (!geo.attributes.uv) geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
 }
 const PAVED = new Set([MATS.asphalt, MATS.concrete, MATS.path, MATS.curb, MATS.paint]);
 const groundMeshes = [];
@@ -725,12 +730,16 @@ function setupHouseModel(modelIdx, root, meta) {
     const isFacade = name.toUpperCase().includes('FACADE');
     let mat = p.material;
     if (isFacade) { mat = HOUSE_MATS.plaster; boxUV(geo, 2.4); }
-    else if (/cooper|steel|seamed|metal/i.test(name)) { mat = HOUSE_MATS.roof; boxUV(geo, 1.1); }
-    else if (/concret/i.test(name)) { mat = HOUSE_MATS.concrete; boxUV(geo, 1.6); }
     else {
       mat = mat.clone(); mat.envMapIntensity = 0.6;
-      if (mat.transparent) { mat.depthWrite = false; mat.roughness = 0.08; mat.metalness = 0.1; mat.envMapIntensity = 1.2; }   // window glass: reflective
-      else if (/gray|grey|dark/i.test(name)) { mat.roughness = 0.55; mat.metalness = 0.2; }                                      // frames, gutters
+      if (/cooper|steel|seamed|metal/i.test(name)) {          // metal roof: corrugation bump across the ridge, original colour
+        boxUV(geo, 1.1, true);
+        mat.normalMap = HOUSE_TEX.roofNor; mat.normalScale = new THREE.Vector2(0.8, 0.8); mat.roughnessMap = HOUSE_TEX.roofRough; mat.roughness = 1; mat.metalness = Math.max(mat.metalness ?? 0, 0.35);
+      } else if (/concret/i.test(name)) {                       // concrete base: subtle grain
+        boxUV(geo, 1.6);
+        mat.normalMap = HOUSE_TEX.concreteNor; mat.normalScale = new THREE.Vector2(0.4, 0.4); mat.roughness = 0.95;
+      } else if (mat.transparent) { mat.depthWrite = false; mat.roughness = 0.08; mat.metalness = 0.1; mat.envMapIntensity = 1.2; }   // window glass: reflective
+      else if (/gray|grey|dark/i.test(name)) { mat.roughness = 0.6; }
       mat.side = THREE.DoubleSide;   // the SketchUp-derived bodies have inconsistent face orientation
     }
     hi.push(make(geo, mat, isFacade));
