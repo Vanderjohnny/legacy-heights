@@ -15,13 +15,13 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // internal modules carry a version query so browsers never pair a new main.js with a cached old module
-import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW, OPEN_PARCELS, IMAGE_KIND, LEISURE } from './config.js?v=25';
-import { api } from './api.js?v=25';
-import { createNight } from './night.js?v=25';
-import { createCars } from './cars.js?v=25';
-import { createRegionMap } from './region.js?v=25';
-import { createPois } from './poi.js?v=25';
-import { createPlanes } from './planes.js?v=25';
+import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW, OPEN_PARCELS, IMAGE_KIND, LEISURE } from './config.js?v=26';
+import { api } from './api.js?v=26';
+import { createNight } from './night.js?v=26';
+import { createCars } from './cars.js?v=26';
+import { createRegionMap } from './region.js?v=26';
+import { createPois } from './poi.js?v=26';
+import { createPlanes } from './planes.js?v=26';
 
 const THREE_VERSION = '0.170.0';
 const ASSET_V = '2026-09-10m';   // bump when models/textures change so browsers do not keep stale copies
@@ -39,7 +39,9 @@ const embedDataUri = (url) => `data:${EMBED.mime[url] || 'application/octet-stre
 const imageUrl = (url) => (embedded(url) ? embedDataUri(url) : url);
 async function loadJson(url) {
   if (EMBED && EMBED.json && EMBED.json[url]) return EMBED.json[url];
-  return (await fetch(url, { cache: 'no-cache' })).json();
+  const res = await fetch(url, { cache: 'no-cache' });
+  if (!res.ok) throw new Error(`${url}: HTTP ${res.status} (run the Blender export / check the data folder)`);
+  return res.json();
 }
 const DRACO_PATH = `https://cdn.jsdelivr.net/npm/three@${THREE_VERSION}/examples/jsm/libs/draco/gltf/`;
 
