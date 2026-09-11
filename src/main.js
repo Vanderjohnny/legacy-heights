@@ -15,13 +15,13 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // internal modules carry a version query so browsers never pair a new main.js with a cached old module
-import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW, OPEN_PARCELS, IMAGE_KIND, LEISURE } from './config.js?v=24';
-import { api } from './api.js?v=24';
-import { createNight } from './night.js?v=24';
-import { createCars } from './cars.js?v=24';
-import { createRegionMap } from './region.js?v=24';
-import { createPois } from './poi.js?v=24';
-import { createPlanes } from './planes.js?v=24';
+import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW, OPEN_PARCELS, IMAGE_KIND, LEISURE } from './config.js?v=25';
+import { api } from './api.js?v=25';
+import { createNight } from './night.js?v=25';
+import { createCars } from './cars.js?v=25';
+import { createRegionMap } from './region.js?v=25';
+import { createPois } from './poi.js?v=25';
+import { createPlanes } from './planes.js?v=25';
 
 const THREE_VERSION = '0.170.0';
 const ASSET_V = '2026-09-10m';   // bump when models/textures change so browsers do not keep stale copies
@@ -57,7 +57,7 @@ const state = {
   hovered: null,        // house record or lot record
   selected: null,
   activeTypes: new Set([1, 2, 3, 4]),
-  activeParcels: new Set([...OPEN_PARCELS, ...PHASES_UNLOCKED]),
+  activeParcels: new Set(OPEN_PARCELS ? [...OPEN_PARCELS, ...PHASES_UNLOCKED] : PARCELS),
   unlockedParcels: new Set(PHASES_UNLOCKED),   // phases under construction opened with the access password (checked server-side), one at a time
   gallery: { items: [], index: 0, h: null },
   chosenColour: {},     // house id -> Blender colour name chosen in the panel (travels with the lead / reservation)
@@ -70,7 +70,7 @@ const state = {
   night: false,
 };
 const t = (k) => I18N[state.lang][k] ?? I18N.en[k] ?? k;
-const isLockedParcel = (p) => !OPEN_PARCELS.includes(p) && !state.unlockedParcels.has(p);
+const isLockedParcel = (p) => !!OPEN_PARCELS && !OPEN_PARCELS.includes(p) && !state.unlockedParcels.has(p);
 const fmt = (n, d = 0) => (n == null || Number.isNaN(n)) ? '–' : n.toLocaleString(state.lang === 'pt' ? 'pt-BR' : 'en-US', { maximumFractionDigits: d, minimumFractionDigits: d });
 
 // ---------------------------------------------------------------------------
@@ -1339,6 +1339,7 @@ function setupUI() {
   $('btn-overview').onclick = () => { clearSelection(); setOverview(false); };
   if ($('btn-top')) $('btn-top').onclick = () => setTopView();
   $('btn-leisure').onclick = openLeisure;
+  if (!LEISURE.length) $('btn-leisure').hidden = true;   // no leisure renders in this project
   // collapsible legend (handle at the top of the card): collapsed by default on phones, remembered per session
   const legendEl = $('legend');
   const phoneQuery = matchMedia('(max-width: 640px)');

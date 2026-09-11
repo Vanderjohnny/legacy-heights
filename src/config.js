@@ -3,7 +3,8 @@
 export const SQFT_PER_M2 = 10.7639;
 
 // House types as tabulated on the Parcel A Extract Plan (gross floor / roof areas per house, sq ft)
-// phases (parcels) open to the public without the password; the others show "under construction" until unlocked
+// phases (parcels) open to the public without the password; the others show "under construction" until unlocked.
+// null = every phase open (no password gate)
 export const OPEN_PARCELS = ['A'];
 
 export const TYPES = {
