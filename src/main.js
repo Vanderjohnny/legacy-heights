@@ -15,13 +15,13 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // internal modules carry a version query so browsers never pair a new main.js with a cached old module
-import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW, OPEN_PARCELS, IMAGE_KIND, LEISURE } from './config.js?v=23';
-import { api } from './api.js?v=23';
-import { createNight } from './night.js?v=23';
-import { createCars } from './cars.js?v=23';
-import { createRegionMap } from './region.js?v=23';
-import { createPois } from './poi.js?v=23';
-import { createPlanes } from './planes.js?v=23';
+import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW, OPEN_PARCELS, IMAGE_KIND, LEISURE } from './config.js?v=24';
+import { api } from './api.js?v=24';
+import { createNight } from './night.js?v=24';
+import { createCars } from './cars.js?v=24';
+import { createRegionMap } from './region.js?v=24';
+import { createPois } from './poi.js?v=24';
+import { createPlanes } from './planes.js?v=24';
 
 const THREE_VERSION = '0.170.0';
 const ASSET_V = '2026-09-10m';   // bump when models/textures change so browsers do not keep stale copies
@@ -46,7 +46,8 @@ const DRACO_PATH = `https://cdn.jsdelivr.net/npm/three@${THREE_VERSION}/examples
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
-const PHASES_UNLOCKED = (() => { try { return sessionStorage.getItem('lh-phases') === '1'; } catch { return false; } })();
+// phases unlocked with the password in this browser session (comma-separated list; '1' = every phase, older format)
+const PHASES_UNLOCKED = (() => { try { const v = sessionStorage.getItem('lh-phases') || ''; return v === '1' ? [...PARCELS] : v.split(',').filter(Boolean); } catch { return []; } })();
 const state = {
   lang: 'en',           // English only on the public site (the PT strings stay in config.js; no toggle in the UI)
   data: null,
@@ -56,8 +57,8 @@ const state = {
   hovered: null,        // house record or lot record
   selected: null,
   activeTypes: new Set([1, 2, 3, 4]),
-  activeParcels: new Set(PHASES_UNLOCKED ? PARCELS : OPEN_PARCELS),
-  unlocked: PHASES_UNLOCKED,   // the phases under construction need the access password (checked server-side)
+  activeParcels: new Set([...OPEN_PARCELS, ...PHASES_UNLOCKED]),
+  unlockedParcels: new Set(PHASES_UNLOCKED),   // phases under construction opened with the access password (checked server-side), one at a time
   gallery: { items: [], index: 0, h: null },
   chosenColour: {},     // house id -> Blender colour name chosen in the panel (travels with the lead / reservation)
   activeStatuses: new Set(['available', 'reserved', 'sold']),
@@ -69,7 +70,7 @@ const state = {
   night: false,
 };
 const t = (k) => I18N[state.lang][k] ?? I18N.en[k] ?? k;
-const isLockedParcel = (p) => !state.unlocked && !OPEN_PARCELS.includes(p);
+const isLockedParcel = (p) => !OPEN_PARCELS.includes(p) && !state.unlockedParcels.has(p);
 const fmt = (n, d = 0) => (n == null || Number.isNaN(n)) ? '–' : n.toLocaleString(state.lang === 'pt' ? 'pt-BR' : 'en-US', { maximumFractionDigits: d, minimumFractionDigits: d });
 
 // ---------------------------------------------------------------------------
@@ -147,16 +148,22 @@ async function setupEnvironment() {
   // comes only from the cascaded directional light and is not baked into the ambient term
   const clamped = new Float32Array(data.length);
   for (let i = 0; i < data.length; i++) clamped[i] = (i & 3) === 3 ? data[i] : Math.min(data[i], 2.2);
-  const envTex = new THREE.DataTexture(clamped, width, height, THREE.RGBAFormat, THREE.FloatType);
-  envTex.mapping = THREE.EquirectangularReflectionMapping;
-  envTex.colorSpace = THREE.LinearSRGBColorSpace;
-  envTex.flipY = hdr.flipY;
-  envTex.needsUpdate = true;
+  const envTex = halfFloatTexture(clamped, width, height, hdr.flipY);
   scene.environment = pmrem.fromEquirectangular(envTex).texture;
   scene.environmentIntensity = 0.85;
   envTex.dispose();
-  scene.background = hdr;
+  // GPU copies as half floats: many phone GPUs cannot filter 32-bit float textures (the sky then samples black / grey)
+  scene.background = halfFloatTexture(data, width, height, hdr.flipY);
+  hdr.dispose();
   scene.backgroundIntensity = 1.0;
+}
+function halfFloatTexture(src, width, height, flipY) {
+  const out = new Uint16Array(src.length);
+  for (let i = 0; i < src.length; i++) out[i] = THREE.DataUtils.toHalfFloat(Math.min(src[i], 65000));
+  const t = new THREE.DataTexture(out, width, height, THREE.RGBAFormat, THREE.HalfFloatType);
+  t.mapping = THREE.EquirectangularReflectionMapping; t.colorSpace = THREE.LinearSRGBColorSpace;
+  t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter; t.generateMipmaps = false; t.flipY = flipY; t.needsUpdate = true;
+  return t;
 }
 function setupShadows() {
   csm = new CSM({ camera, parent: scene, cascades: 3, maxFar: 1500, mode: 'practical', shadowMapSize: IS_TOUCH ? 1024 : 2048, shadowBias: -0.00012,
@@ -1332,6 +1339,15 @@ function setupUI() {
   $('btn-overview').onclick = () => { clearSelection(); setOverview(false); };
   if ($('btn-top')) $('btn-top').onclick = () => setTopView();
   $('btn-leisure').onclick = openLeisure;
+  // collapsible legend (handle at the top of the card): collapsed by default on phones, remembered per session
+  const legendEl = $('legend');
+  const phoneQuery = matchMedia('(max-width: 640px)');
+  const legendPref = (() => { try { return sessionStorage.getItem('lh-legend'); } catch { return null; } })();
+  legendEl.classList.toggle('collapsed', legendPref ? legendPref === '1' : phoneQuery.matches);
+  $('legend-toggle').onclick = () => { const c = legendEl.classList.toggle('collapsed'); try { sessionStorage.setItem('lh-legend', c ? '1' : '0'); } catch { /* private mode */ } };
+  // on phones the imagery credits live inside the legend card (as a fixed line they overlapped it)
+  const placeCredits = () => { const cr = $('credits'); if (phoneQuery.matches) { if (cr.parentElement !== legendEl) legendEl.appendChild(cr); } else if (cr.parentElement === legendEl) document.body.appendChild(cr); };
+  placeCredits(); window.addEventListener('resize', placeCredits);
   $('btn-colortype').onclick = () => { state.colorByType = !state.colorByType; $('btn-colortype').classList.toggle('active', state.colorByType); refreshFacadeColors(); };
   $('btn-ao').classList.toggle('active', state.ao);
   $('btn-ao').onclick = () => { state.ao = !state.ao; $('btn-ao').classList.toggle('active', state.ao); };
@@ -1540,11 +1556,11 @@ function openUnlock(parcel, pending = null) {
     btn.disabled = true; btn.textContent = t('checking'); out.className = 'form-msg'; out.textContent = '';
     try {
       await api.unlock(pw);
-      state.unlocked = true;
-      try { sessionStorage.setItem('lh-phases', '1'); } catch { /* private mode */ }
-      state.activeParcels = new Set(PARCELS);
+      state.unlockedParcels.add(parcel);
+      try { sessionStorage.setItem('lh-phases', [...state.unlockedParcels].join(',')); } catch { /* private mode */ }
+      state.activeParcels.add(parcel);
       if (pending) { state.activeTypes.add(pending.type); state.activeStatuses.add(statusOf(pending)); }
-      applyFilter(); buildLegend(); closeModal(); toast(t('unlocked'));
+      applyFilter(); buildLegend(); closeModal(); toast(t('unlocked').replace('{p}', parcel));
       if (pending) select(pending, true);
     } catch (e) {
       const msg = e.message === 'unauthorized' ? t('wrongPassword') : e.message === 'throttled' ? t('throttled') : e.message === 'no-backend' ? t('readOnly') : t('networkError');

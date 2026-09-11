@@ -41,6 +41,7 @@ body = re.sub(r"<script[^>]*src=[^>]*></script>", "", body).strip()
 css = open(os.path.join(SITE, "styles.css"), encoding="utf-8").read() + "\n" + open(os.path.join(SITE, "panel.css"), encoding="utf-8").read()
 # images referenced directly by the markup / stylesheets (the logo) become data URIs
 def data_uri(rel):
+    rel = rel.split("?")[0]
     p = os.path.join(SITE, rel)
     if not os.path.exists(p): return rel
     return f"data:{mimetypes.guess_type(p)[0] or 'application/octet-stream'};base64," + base64.b64encode(open(p, "rb").read()).decode("ascii")

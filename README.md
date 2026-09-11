@@ -48,8 +48,10 @@ Any other static server works for the read-only site (`python -m http.server 517
   legend (`assets/unk.png`) links to https://unk.group.
 - **Phases gate**: only phase A is open when the page loads; the other phases show a lock in the legend and open a
   "Phase X · under construction" dialog asking for the access password. The password is checked by the sales backend
-  (`unlock` action, or a harmless `release` probe on older deployments), never in the page; once accepted, every
-  phase is shown for the rest of the browser session. `OPEN_PARCELS` in `src/config.js` lists the open phases.
+  (`unlock` action, or a harmless `release` probe on older deployments), never in the page; once accepted, that phase
+  (only) stays open for the rest of the browser session.
+- **Legend**: collapsible through the handle at the top of the card (collapsed by default on phones, remembered per
+  session); on phones the imagery credits move inside the card. `OPEN_PARCELS` in `src/config.js` lists the open phases.
 - **House names**: the legend, tooltips and panel use the plan names (House Altura / Horizon / Pinnacle / Vista); the
   panel title reads "Lot A-21 · Pinnacle" and shows the phase, the plan, layout, areas and facade colour only.
 - **Panel gallery and colours**: the panel image is a gallery of the reference renders of the same body kind

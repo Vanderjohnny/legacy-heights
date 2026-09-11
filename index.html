@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%23101418%27/%3E%3Ctext x=%2732%27 y=%2742%27 font-family=%27Georgia,serif%27 font-size=%2728%27 text-anchor=%27middle%27 fill=%27%23fff%27%3ELH%3C/text%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="styles.css?v=15" />
+  <link rel="stylesheet" href="styles.css?v=16" />
   <link rel="stylesheet" href="panel.css?v=10" />
   <script type="importmap">
     {
@@ -56,7 +56,7 @@
   <header id="topbar">
     <div class="brand">
       <div class="brand-block">
-        <img class="brand-logo" src="assets/logo.png" alt="Legacy Heights" />
+        <img class="brand-logo" src="assets/logo.png?v=2" alt="Legacy Heights" />
         <p data-i18n="subtitle">Lowthers Plantation · Christ Church · Barbados</p>
       </div>
     </div>
@@ -76,6 +76,7 @@
   </header>
 
   <aside id="legend">
+    <button type="button" id="legend-toggle" class="legend-handle" aria-label="Show or hide the legend"><span class="lh-label" data-i18n="legendMenu">Legend</span><span class="lh-chev">&#8963;</span></button>
     <h2 data-i18n="legend">House types</h2>
     <div id="legend-items"></div>
     <h2 class="legend-sub" data-i18n="parcels">Phases</h2>
@@ -85,7 +86,7 @@
     <div id="status-by-phase" hidden></div>
     <div class="time-row"><span data-i18n="lighting">Lighting</span><input id="time-slider" type="range" min="0" max="1000" value="0" aria-label="Time of day" /><span id="time-label">Day</span></div>
     <p class="hint" data-i18n="hoverHint">Hover a house for a quick summary · click to open details</p>
-    <a id="unk-link" href="https://unk.group" target="_blank" rel="noopener" title="UNK Group"><img class="unk-logo" src="assets/unk.png" alt="UNK Group" /></a>
+    <a id="unk-link" href="https://unk.group" target="_blank" rel="noopener" title="UNK Group"><img class="unk-logo" src="assets/unk.png?v=2" alt="UNK Group" /></a>
   </aside>
 
   <div id="compass-wrap" title="North"><div id="compass"><span>N</span></div></div>
@@ -165,6 +166,6 @@
 
   <div id="toast"></div>
 
-  <script type="module" src="src/main.js?v=23"></script>
+  <script type="module" src="src/main.js?v=24"></script>
 </body>
 </html>
