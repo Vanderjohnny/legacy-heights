@@ -29,8 +29,17 @@ h1, h2, h3, p { margin: 0; }
 .ld-slide.on { opacity: 1; }
 .loading-card { position: relative; z-index: 2; text-align: center; width: min(52vw, 440px); }
 .loading-card p { color: rgba(255,255,255,0.88); margin-top: 14px; font-size: 13px; text-shadow: 0 1px 6px rgba(0,0,0,0.6); }
-.bar { height: 3px; background: rgba(255,255,255,0.28); border-radius: 3px; overflow: hidden; }
-#loading-bar { height: 100%; width: 0%; background: #fff; transition: width 0.25s ease; }
+/* text loader under the logotype (cssloaders.github.io, 'text'): one word every 1.2 s, five equal steps so
+   the last word is shown as long as the others; the site font instead of Arial */
+.loader { display: inline-block; font-family: var(--font); font-weight: 700; font-size: clamp(24px, 5vw, 44px); letter-spacing: 2px; line-height: 1.2; color: #fff; text-shadow: 0 2px 16px rgba(0,0,0,0.6); box-sizing: border-box; min-height: 1.2em; }
+.loader::before { content: 'Loading...'; animation: animloader 6s steps(1) infinite; }
+@keyframes animloader {
+  0% { content: 'Loading...'; }
+  20% { content: 'Your...'; }
+  40% { content: 'New...'; }
+  60% { content: 'Home...'; }
+  80% { content: 'Wait...'; }
+}
 /* logotype (assets/logo.png: black ink on transparent, inverted at night) */
 .brand-logo { display: block; width: 168px; height: auto; user-select: none; -webkit-user-drag: none; }
 .brand-logo.large { width: 100%; margin: 0 auto 24px; filter: invert(1) brightness(0.98) drop-shadow(0 8px 28px rgba(0,0,0,0.55)); }

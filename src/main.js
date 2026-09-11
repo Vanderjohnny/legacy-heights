@@ -258,7 +258,7 @@ function blenderMatrix(pos, rotDeg, scale) {
 const manager = new THREE.LoadingManager();
 const loadingEl = document.getElementById('loading');
 const barEl = document.getElementById('loading-bar');
-manager.onProgress = (url, loaded, total) => { barEl.style.width = `${Math.round((loaded / total) * 100)}%`; };
+manager.onProgress = (url, loaded, total) => { if (barEl) barEl.style.width = `${Math.round((loaded / total) * 100)}%`; };   // the bar is optional (text loader since round 16)
 const gltfLoader = new GLTFLoader(manager);
 const draco = new DRACOLoader(manager);
 draco.setDecoderPath(DRACO_PATH);
