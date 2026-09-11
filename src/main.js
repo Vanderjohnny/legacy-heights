@@ -15,13 +15,13 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // internal modules carry a version query so browsers never pair a new main.js with a cached old module
-import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW, OPEN_PARCELS, IMAGE_KIND, LEISURE } from './config.js?v=26';
-import { api } from './api.js?v=26';
-import { createNight } from './night.js?v=26';
-import { createCars } from './cars.js?v=26';
-import { createRegionMap } from './region.js?v=26';
-import { createPois } from './poi.js?v=26';
-import { createPlanes } from './planes.js?v=26';
+import { TYPES, PDF_TYPE, MODEL_KIND, COLOR_LABEL, IMAGE_COLOR, imageFor, I18N, SQFT_PER_M2, PARCELS, STATUS, BACKEND, PARK_LOTS, OVERVIEW, OPEN_PARCELS, IMAGE_KIND, LEISURE, PID_PREFIX, TYPOLOGY, BUILDING } from './config.js?v=27';
+import { api } from './api.js?v=27';
+import { createNight } from './night.js?v=27';
+import { createCars } from './cars.js?v=27';
+import { createRegionMap } from './region.js?v=27';
+import { createPois } from './poi.js?v=27';
+import { createPlanes } from './planes.js?v=27';
 
 const THREE_VERSION = '0.170.0';
 const ASSET_V = '2026-09-10m';   // bump when models/textures change so browsers do not keep stale copies
@@ -58,7 +58,10 @@ const state = {
   byId: new Map(),
   hovered: null,        // house record or lot record
   selected: null,
-  activeTypes: new Set([1, 2, 3, 4]),
+  activeTypes: new Set(Object.keys(TYPES).map(Number)),
+  floors: [],           // vertical projects: [{ n, name, node, z0, z1 }] from data/site.json
+  floor: null,          // selected floor (null = all)
+  isBuilding: false,
   activeParcels: new Set(OPEN_PARCELS ? [...OPEN_PARCELS, ...PHASES_UNLOCKED] : PARCELS),
   unlockedParcels: new Set(PHASES_UNLOCKED),   // phases under construction opened with the access password (checked server-side), one at a time
   gallery: { items: [], index: 0, h: null },
@@ -73,6 +76,7 @@ const state = {
 };
 const t = (k) => I18N[state.lang][k] ?? I18N.en[k] ?? k;
 const isLockedParcel = (p) => !!OPEN_PARCELS && !OPEN_PARCELS.includes(p) && !state.unlockedParcels.has(p);
+const allTypes = () => new Set(Object.keys(TYPES).map(Number));
 const fmt = (n, d = 0) => (n == null || Number.isNaN(n)) ? '–' : n.toLocaleString(state.lang === 'pt' ? 'pt-BR' : 'en-US', { maximumFractionDigits: d, minimumFractionDigits: d });
 
 // ---------------------------------------------------------------------------
@@ -286,26 +290,25 @@ async function init() {
   buildLots(data);
 
   // the single-file build ships the six houses merged in one GLB (one scene per body) so their textures are shared
-  const mergedHouses = embedded('assets/models/houses.glb');
-  const [, , ground, ...houseGltfs] = await Promise.all([
-    setupEnvironment(),
-    setupSatellite(),
-    loadGLB('assets/models/ground.glb'),
-    ...(mergedHouses ? [loadGLB('assets/models/houses.glb')] : [1, 2, 3, 4, 5, 6].map((i) => loadGLB(`assets/models/house_${i}.glb`))),
-  ]);
+  const mergedHouses = !state.isBuilding && embedded('assets/models/houses.glb');
+  const loads = [setupEnvironment(), setupSatellite(), loadGLB('assets/models/ground.glb').catch((e) => { if (!state.isBuilding) throw e; return null; })];
+  if (state.isBuilding) loads.push(loadGLB('assets/models/building.glb'));
+  else loads.push(...(mergedHouses ? [loadGLB('assets/models/houses.glb')] : [1, 2, 3, 4, 5, 6].map((i) => loadGLB(`assets/models/house_${i}.glb`))));
+  const [, , ground, ...modelGltfs] = await Promise.all(loads);
   setupShadows();
-  setupGround(ground.scene);
+  if (ground) setupGround(ground.scene);
   buildPavedGrid();
   completeHedges();
-  if (mergedHouses) {
+  if (state.isBuilding) setupBuilding(modelGltfs[0]);
+  else if (mergedHouses) {
     // Blender exports every scene of the .blend; find each body by its node name across all scenes
     for (let i = 1; i <= 6; i++) {
       let node = null;
-      for (const sc of houseGltfs[0].scenes) { node = sc.getObjectByName(`house_${i}`); if (node) break; }
+      for (const sc of modelGltfs[0].scenes) { node = sc.getObjectByName(`house_${i}`); if (node) break; }
       if (node) setupHouseModel(i, node, data.models[i]); else console.warn('house body missing in merged GLB', i);
     }
-  } else houseGltfs.forEach((g, idx) => setupHouseModel(idx + 1, g.scene, data.models[idx + 1]));
-  await buildTrees(data);
+  } else modelGltfs.forEach((g, idx) => setupHouseModel(idx + 1, g.scene, data.models[idx + 1]));
+  if (data.species && data.species.length) await buildTrees(data);
   night = createNight({ scene, renderer, camera, controls, getCsm: () => csm, hemi, treeGroup, worldGround, satMeshes, HORIZON, pmrem, isTouch: IS_TOUCH, lots: state.lots, lotByHouse: state.lotByHouse, pavedClass, models, rebuildInstances, sunDir: SUN_DIR, onTime, siteBounds: state.data.bounds, airport: state.airport, runway: runwayCentreline(state.airport), glassMats });
   night.build();
   cars = createCars({ scene, loadGLB, pavedClass, pavedGrid: paved, debug: /carsdebug/.test(location.search), paintGeometries: groundMeshes.filter((o) => (Array.isArray(o.material) ? o.material[0] : o.material) === MATS.paint).map((o) => o.geometry), isTouch: IS_TOUCH });
@@ -387,7 +390,8 @@ function buildUnits() {
 }
 // the unit under a point (Blender XY) of a house: the side of the party wall the point falls on
 function unitOfHouseAt(h, x, y) {
-  if (!h.units || h.units.length === 1) return h.units ? h.units[0] : null;
+  if (!h.units) return h.isUnit ? h : null;
+  if (h.units.length === 1) return h.units[0];
   const sgn = (x - h.pos[0]) * h.axis[0] + (y - h.pos[1]) * h.axis[1] < 0 ? -1 : 1;
   return h.units.find((u) => u.sideSign === sgn) || h.units[0];
 }
@@ -397,7 +401,111 @@ function unitAt(x, y) {
   return list.length === 1 ? list[0] : unitOfHouseAt(list[0].house, x, y);
 }
 
+// ---------------------------------------------------------------------------
+// Vertical projects (TYPOLOGY building): floors + apartments read from data/site.json (tools/blender_export_units.py)
+// ---------------------------------------------------------------------------
+function prepareBuildingData(data) {
+  state.lots = []; state.houses = []; state.byId = new Map(); state.lotByHouse = new Map(); state.unitsByLot = new Map();
+  state.floors = (data.floors || []).slice().sort((a, b) => a.n - b.n);
+  state.units = (data.units || []).map((u, i) => {
+    const prop = state.props[u.pid] || null;
+    const box = u.box || { center: u.pos || [0, 0, 0], size: [8, 3, 8], rot: 0 };
+    return { ...u, isUnit: true, isHouse: true, kind: 'apartment', index: i, id: `Unit ${u.code}`, num: String(u.code).replace(/\D+/g, ''), code: String(u.code),
+      parcel: u.tower || u.parcel || 'T1', type: u.type ?? 1, floor: u.floor ?? 0, prop, box, pos: box.center,
+      matrix: blenderMatrix(box.center, [0, 0, box.rot || 0], box.size), lotPolys: [], lotArea: u.area_m2 ?? null, lots: [], lotIndex: '', lotNum: '',
+      color: null, model: null, prevLot: null, house: null };
+  });
+  state.unitByPid = new Map(state.units.map((u) => [u.pid, u]));
+}
+let floorNodes = [];
+const towerCentres = new Map();
+function towerCenter(h) {
+  if (!towerCentres.has(h.parcel)) {
+    const list = state.units.filter((u) => u.parcel === h.parcel && u.box);
+    const c = new THREE.Vector3(); list.forEach((u) => c.add(b2t(...u.box.center))); if (list.length) c.multiplyScalar(1 / list.length);
+    towerCentres.set(h.parcel, c);
+  }
+  return towerCentres.get(h.parcel);
+}
+function setupBuilding(gltf) {
+  const root = gltf.scene; root.updateMatrixWorld(true);
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    o.castShadow = true; o.receiveShadow = true;
+    for (const m of (Array.isArray(o.material) ? o.material : [o.material])) { if (m.transparent) { m.depthWrite = false; o.castShadow = false; } m.side = THREE.DoubleSide; }
+  });
+  scene.add(root);
+  floorNodes = state.floors.map((f) => ({ ...f, node: root.getObjectByName(f.node || `floor_${String(f.n).padStart(2, '0')}`), ghosted: false, targetY: null })).filter((f) => f.node);
+  // picking: one instanced box per unit (its Blender box: centre, size, rotation)
+  const proxy = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true }), Math.max(1, state.units.length));
+  proxy.visible = false; proxy.frustumCulled = false; proxy.userData = { houses: state.units };
+  state.units.forEach((u, k) => proxy.setMatrixAt(k, u.matrix));
+  proxy.count = state.units.length; proxy.instanceMatrix.needsUpdate = true;
+  scene.add(proxy); proxies.push(proxy);
+  applyFloorReveal();
+}
+// floors above the selected one: ghosted (transparent), hidden or lifted (BUILDING.reveal)
+function applyFloorReveal() {
+  const sel = state.floor, mode = (BUILDING && BUILDING.reveal) || 'ghost';
+  for (const f of floorNodes) {
+    const above = sel != null && f.n > sel;
+    if (mode === 'hide') { f.node.visible = !above; setGhost(f, false); f.targetY = 0; }
+    else if (mode === 'explode') { f.node.visible = true; setGhost(f, false); f.targetY = above ? (f.n - sel) * ((BUILDING && BUILDING.explodeGap) || 2.5) : 0; }
+    else { f.node.visible = true; setGhost(f, above); f.targetY = 0; }
+  }
+}
+function setGhost(f, on) {
+  if (f.ghosted === on) return;
+  f.ghosted = on;
+  f.node.traverse((o) => {
+    if (!o.isMesh) return;
+    if (on) {
+      o.userData.solidMat = o.material;
+      const ghost = (m) => { const c = m.clone(); c.transparent = true; c.opacity = 0.12; c.depthWrite = false; return c; };
+      o.material = Array.isArray(o.material) ? o.material.map(ghost) : ghost(o.material);
+      o.castShadow = false;
+    } else if (o.userData.solidMat) { o.material = o.userData.solidMat; o.castShadow = true; }
+  });
+}
+function animateFloors() {
+  for (const f of floorNodes) {
+    if (f.targetY == null) continue;
+    const y = f.node.position.y;
+    if (Math.abs(f.targetY - y) < 0.005) { if (y !== f.targetY) f.node.position.y = f.targetY; continue; }
+    f.node.position.y = y + (f.targetY - y) * 0.12;
+  }
+}
+// outline of a unit box (Blender centre / size / rotation Z) as line segments in three.js coordinates
+function boxEdgePositions(box) {
+  const [cx, cy, cz] = box.center, [sx, sy, sz] = box.size, r = THREE.MathUtils.degToRad(box.rot || 0), cr = Math.cos(r), sr = Math.sin(r);
+  const corner = (ix, iy, iz) => { const lx = ix * sx / 2, ly = iy * sy / 2; return [cx + lx * cr - ly * sr, cy + lx * sr + ly * cr, cz + iz * sz / 2]; };
+  const C = [[-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1], [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]].map((s) => corner(...s));
+  const E = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]];
+  const out = [];
+  for (const [a, b] of E) { const p = C[a], q = C[b]; out.push(p[0], p[2], -p[1], q[0], q[2], -q[1]); }
+  return out;
+}
+function setBoxOutline(line, box) {
+  line.geometry.dispose();
+  line.geometry = new LineSegmentsGeometry().setPositions(boxEdgePositions(box));
+  line.computeLineDistances();
+  line.visible = true;
+}
+function apartmentFacts(h, ty) {
+  const prop = h.prop || {};
+  const area = h.lotArea ?? (ty.gfaSqft ? ty.gfaSqft / SQFT_PER_M2 : null);
+  return `
+    <div class="facts">
+      <div class="fact"><span class="k">${t('apartmentType')}</span><span class="v">${ty.label ? ty.label[state.lang] : '–'}${prop.planName ? ` <em>${prop.planName}</em>` : ''}</span></div>
+      <div class="fact"><span class="k">${state.lang === 'pt' ? 'Programa' : 'Layout'}</span><span class="v">${ty.beds ?? '–'} ${t('beds')} · ${ty.baths ?? '–'} ${t('baths')}</span></div>
+      <div class="fact"><span class="k">${t('privateArea')}</span><span class="v">${fmt(area, 1)} ${t('sqm')} <em>${fmt(area == null ? null : area * SQFT_PER_M2)} ${t('sqft')}</em></span></div>
+      <div class="fact"><span class="k">${t('floor')}</span><span class="v">${h.floor} <em>${t('tower')} ${h.parcel}</em></span></div>
+    </div>`;
+}
+
 function prepareData(data) {
+  state.isBuilding = data.typology === 'building' || (TYPOLOGY === 'building' && Array.isArray(data.units));
+  if (state.isBuilding) { prepareBuildingData(data); return; }
   const lotsById = data.lots;
   state.lots = Object.values(lotsById).map((l) => {
     const xs = l.poly.map((p) => p[0]), ys = l.poly.map((p) => p[1]);
@@ -447,17 +555,19 @@ function prepareData(data) {
 // ---------------------------------------------------------------------------
 const texLoader = new THREE.TextureLoader(manager);
 const MAX_ANISO = renderer.capabilities.getMaxAnisotropy();
-function loadTex(url, srgb = true) {
-  const t = texLoader.load(embedded(url) ? embedDataUri(url) : asset(url));
+function loadTex(url, srgb = true, onFail = null) {
+  const t = texLoader.load(embedded(url) ? embedDataUri(url) : asset(url), undefined, undefined, () => { if (onFail) onFail(); });
   t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
   t.anisotropy = MAX_ANISO;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   return t;
 }
 function texturedMaterial({ diff, nor, rough, color = 0xffffff, roughness = 1, normalScale = 0.7 }) {
-  const m = new THREE.MeshStandardMaterial({ color, roughness, metalness: 0, map: loadTex(diff) });
-  if (nor) { m.normalMap = loadTex(nor, false); m.normalScale.set(normalScale, normalScale); }
-  if (rough) m.roughnessMap = loadTex(rough, false);
+  // a missing texture file (project without the PBR set yet) leaves the plain colour instead of a black surface
+  const m = new THREE.MeshStandardMaterial({ color, roughness, metalness: 0 });
+  m.map = loadTex(diff, true, () => { m.map = null; m.needsUpdate = true; });
+  if (nor) { m.normalMap = loadTex(nor, false, () => { m.normalMap = null; m.needsUpdate = true; }); m.normalScale.set(normalScale, normalScale); }
+  if (rough) m.roughnessMap = loadTex(rough, false, () => { m.roughnessMap = null; m.needsUpdate = true; });
   m.userData.antiTiling = true;
   return m;
 }
@@ -930,7 +1040,7 @@ function rebuildInstances(force = false) {
 }
 function refreshFacadeColors() { rebuildInstances(true); }
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
-const isVisibleHouse = (h) => state.activeTypes.has(h.type) && state.activeParcels.has(h.parcel) && (h.house ? state.activeStatuses.has(statusOf(h)) : (h.units || [h]).some((u) => state.activeStatuses.has(statusOf(u))));
+const isVisibleHouse = (h) => state.activeTypes.has(h.type) && state.activeParcels.has(h.parcel) && (state.floor == null || h.floor == null || h.floor <= state.floor) && (h.house ? state.activeStatuses.has(statusOf(h)) : (h.units || [h]).some((u) => state.activeStatuses.has(statusOf(u))));
 function applyFilter() {
   const visible = isVisibleHouse;
   for (const im of proxies) {
@@ -1182,7 +1292,7 @@ const tooltip = document.getElementById('tooltip');
 function setHover(obj, ev) {
   if (obj !== state.hovered) {
     state.hovered = obj;
-    if (obj) setLineFromPolys(hoverLine, obj.isHouse ? obj.lotPolys : [obj.poly], 0.1); else hoverLine.visible = false;
+    if (obj && obj.box) setBoxOutline(hoverLine, obj.box); else if (obj) setLineFromPolys(hoverLine, obj.isHouse ? obj.lotPolys : [obj.poly], 0.1); else hoverLine.visible = false;
     renderer.domElement.style.cursor = obj ? 'pointer' : '';
     if (obj) tooltip.innerHTML = tooltipHtml(obj);
     tooltip.classList.toggle('show', !!obj);
@@ -1190,6 +1300,10 @@ function setHover(obj, ev) {
   if (obj && ev) { tooltip.style.left = `${ev.clientX + 16}px`; tooltip.style.top = `${ev.clientY + 16}px`; }
 }
 function tooltipHtml(o) {
+  if (o.kind === 'apartment') {
+    const ty = TYPES[o.type] || {}, st = statusOf(o);
+    return `<b>${t('unitTitle')} ${o.code}</b> · <span class="dot" style="background:${STATUS[st].hex}"></span>${STATUS[st].label[state.lang]}<br><span class="dot" style="background:${ty.hex || '#888'}"></span>${ty.label ? ty.label[state.lang] : ''}${ty.beds ? ` · ${ty.beds} ${t('beds')} · ${ty.baths} ${t('baths')}` : ''}<br><span class="muted">${t('tower')} ${o.parcel} · ${t('floor')} ${o.floor}${o.lotArea ? ` · ${fmt(o.lotArea)} ${t('sqm')} · ${fmt(o.lotArea * SQFT_PER_M2)} ${t('sqft')}` : ''}</span>`;
+  }
   if (o.isHouse) {
     const ty = TYPES[o.type], st = statusOf(o);
     const twin = o.house && o.house.units.length > 1 ? o.house.units.find((u) => u !== o) : null;
@@ -1215,6 +1329,7 @@ renderer.domElement.addEventListener('pointerup', (ev) => {
 // Selection + camera
 // ---------------------------------------------------------------------------
 function houseWorldCenter(h) {
+  if (h.box) return b2t(...h.box.center);
   const info = modelInfo[h.model];
   return info.center.clone().applyMatrix4(h.matrix);
 }
@@ -1224,10 +1339,9 @@ function houseFrontDir(h) {
 }
 function select(h, fly = true) {
   state.selected = h;
-  setLineFromPolys(selectLine, h.lotPolys, 0.14);
-  setFillFromPolys(selectFill, h.lotPolys);
+  if (h.box) { setBoxOutline(selectLine, h.box); selectFill.visible = false; } else { setLineFromPolys(selectLine, h.lotPolys, 0.14); setFillFromPolys(selectFill, h.lotPolys); }
   renderPanel(h);
-  try { history.replaceState(null, '', `#${h.pid ? 'p-' + h.pid.replace(/^LH_/, '') : 'casa-' + h.num}`); } catch { /* sandboxed page */ }
+  try { history.replaceState(null, '', `#${h.pid ? 'p-' + h.pid.replace(PID_PREFIX, '') : 'casa-' + h.num}`); } catch { /* sandboxed page */ }
   if (fly) flyToHouse(h);
 }
 // reserved / sold lots get a permanent coloured outline in the scene
@@ -1238,6 +1352,7 @@ function buildStatusLines() {
     const st = statusOf(h);
     if (st === 'available' || !isVisibleHouse(h)) continue;
     const c = new THREE.Color(STATUS[st].hex);
+    if (h.box) { const e = boxEdgePositions(h.box); for (let i = 0; i < e.length; i += 3) { pos.push(e[i], e[i + 1], e[i + 2]); col.push(c.r, c.g, c.b); } continue; }
     for (const poly of h.lotPolys) {
       for (let i = 0; i < poly.length; i++) {
         const a = poly[i], b = poly[(i + 1) % poly.length];
@@ -1265,14 +1380,27 @@ function clearSelection() {
   try { history.replaceState(null, '', location.pathname + location.search); } catch { /* sandboxed page */ }
 }
 function flyToHouse(h) {
-  const center = houseWorldCenter(h);
-  const front = houseFrontDir(h);
   const up = new THREE.Vector3(0, 1, 0);
-  const right = new THREE.Vector3().crossVectors(front, up).normalize();
-  const info = modelInfo[h.model];
-  const d = Math.max(info.size.x, info.size.z) * 1.9;
-  const pos = center.clone().addScaledVector(front, d).addScaledVector(right, d * 0.42).addScaledVector(up, d * 0.62);
-  const target = center.clone().setY(center.y - info.size.y * 0.2);
+  let center, front, d, pos, target;
+  if (h.box) {
+    // apartment: look at the unit from outside the tower, from the side of the facade it sits on
+    center = b2t(...h.box.center);
+    const tc = towerCenter(h);
+    front = new THREE.Vector3(center.x - tc.x, 0, center.z - tc.z);
+    if (front.lengthSq() < 1) front.set(0, 0, 1);
+    front.normalize();
+    d = Math.max(h.box.size[0], h.box.size[1]) * 1.6 + 14;
+    pos = center.clone().addScaledVector(front, d).addScaledVector(up, h.box.size[2] * 0.6 + 4);
+    target = center.clone();
+  } else {
+    center = houseWorldCenter(h);
+    front = houseFrontDir(h);
+    const right = new THREE.Vector3().crossVectors(front, up).normalize();
+    const info = modelInfo[h.model];
+    d = Math.max(info.size.x, info.size.z) * 1.9;
+    pos = center.clone().addScaledVector(front, d).addScaledVector(right, d * 0.42).addScaledVector(up, d * 0.62);
+    target = center.clone().setY(center.y - info.size.y * 0.2);
+  }
   // keep the house clear of the detail panel: on desktop shift the view so the house sits in the left two thirds,
   // on phones (bottom sheet) lift the house into the upper part of the screen
   const panelW = document.getElementById('panel').offsetWidth || 380;
@@ -1320,7 +1448,12 @@ function siteCenter() {
 }
 function setOverview(instant = false) {
   // the opening view picked in the viewer (config.OVERVIEW); portrait phones pull back and up so the site still fits
-  const target = new THREE.Vector3(...OVERVIEW.target), pos = new THREE.Vector3(...OVERVIEW.pos);
+  let target, pos;
+  if (OVERVIEW) { target = new THREE.Vector3(...OVERVIEW.target); pos = new THREE.Vector3(...OVERVIEW.pos); }
+  else {   // no view captured yet: frame the site bounds from the south-east, looking down
+    const b = state.data.bounds, R = Math.max(60, b.max[0] - b.min[0], b.max[1] - b.min[1]);
+    target = siteCenter(); pos = target.clone().add(new THREE.Vector3(-0.55 * R, 0.75 * R + 20, 1.05 * R));
+  }
   const portrait = window.innerHeight > window.innerWidth;
   if (portrait) { pos.sub(target).multiplyScalar(1.35).add(target); pos.y += 80; }
   if (instant) { camera.position.copy(pos); controls.target.copy(target); controls.update(); }
@@ -1338,6 +1471,11 @@ function setTopView() {
 const $ = (id) => document.getElementById(id);
 function setupUI() {
   applyI18n();
+  // projects without a logotype yet: the name as text instead of a broken image
+  document.querySelectorAll('.brand-logo').forEach((img) => {
+    const fail = () => { const h = document.createElement('h1'); h.className = img.classList.contains('large') ? 'brand-text large' : 'brand-text'; h.textContent = document.title.split(' · ')[0]; img.replaceWith(h); };
+    if (img.complete && img.naturalWidth === 0) fail(); else img.addEventListener('error', fail);
+  });
   $('btn-overview').onclick = () => { clearSelection(); setOverview(false); };
   if ($('btn-top')) $('btn-top').onclick = () => setTopView();
   $('btn-leisure').onclick = openLeisure;
@@ -1366,7 +1504,7 @@ function setupUI() {
     results.innerHTML = '';
     if (!q) { results.classList.remove('show'); return; }
     const found = state.units.filter((h) => h.num.includes(q) || h.code.toLowerCase().replace(/\s+/g, '').includes(q) || h.lotNum.toLowerCase().replace(/\s+/g, '').includes(q) || h.lotIndex.includes(q) || h.num === q.padStart(3, '0') || (h.pid && h.pid.toLowerCase().includes(q))).slice(0, 8);
-    results.innerHTML = found.length ? found.map((h) => `<div data-id="${h.pid}"><b>${t('lot')} ${h.code}</b> · ${t('house')} ${h.num} <span class="dot" style="background:${TYPES[h.type].hex}"></span>${TYPES[h.type].label[state.lang]} <span class="dot" style="background:${STATUS[statusOf(h)].hex}"></span></div>`).join('') : `<div class="muted">${t('noResults')}</div>`;
+    results.innerHTML = found.length ? found.map((h) => `<div data-id="${h.pid}"><b>${h.kind === 'apartment' ? `${t('unitTitle')} ${h.code}` : `${t('lot')} ${h.code}`}</b> · ${h.kind === 'apartment' ? `${t('floor')} ${h.floor}` : `${t('house')} ${h.num}`} <span class="dot" style="background:${TYPES[h.type].hex}"></span>${TYPES[h.type].label[state.lang]} <span class="dot" style="background:${STATUS[statusOf(h)].hex}"></span></div>`).join('') : `<div class="muted">${t('noResults')}</div>`;
     results.classList.add('show');
   });
   results.addEventListener('click', (ev) => {
@@ -1384,7 +1522,7 @@ function setupUI() {
   $('plan-expand').onclick = () => openLightbox(planItems(), 0);
   $('panel-plan').onclick = () => openLightbox(planItems(), 0);
   let swipeX = null, swiped = false;
-  $('panel-img').onclick = () => { if (swiped) { swiped = false; return; } const g = state.gallery; if (!g.items.length) return; openLightbox(g.items.map((it) => ({ src: imageUrl(`assets/img/house_${it.index}.jpg`), caption: `${it.label} · ${kindLabel(it.kind)}` })), g.index); };
+  $('panel-img').onclick = () => { if (swiped) { swiped = false; return; } const g = state.gallery; if (!g.items.length) return; openLightbox(g.items.map((it) => ({ src: imageUrl(it.src), caption: `${it.label} · ${kindLabel(it.kind)}` })), g.index); };
   $('gal-prev').onclick = (ev) => { ev.stopPropagation(); stepGallery(-1); };
   $('gal-next').onclick = (ev) => { ev.stopPropagation(); stepGallery(1); };
   $('panel-figure').addEventListener('pointerdown', (ev) => { swipeX = ev.clientX; });
@@ -1398,6 +1536,7 @@ function setupUI() {
   $('btn-sold').onclick = () => state.selected && openStatusChange(state.selected, statusOf(state.selected) === 'sold' ? 'release' : 'sold');
   $('btn-night').onclick = () => setNight(!state.night);
   $('btn-map').onclick = () => openRegionMap();
+  if (!state.satMeta) $('btn-map').hidden = true;   // no satellite imagery fetched for this project
   document.querySelector('.map-close').onclick = () => closeRegionMap();
   $('map-modal').onclick = (ev) => { if (ev.target.id === 'map-modal') closeRegionMap(); };
   $('time-slider').oninput = (ev) => { if (night) night.setTime(ev.target.value / 1000); };
@@ -1425,7 +1564,7 @@ function step(dir) {
 function buildLegend() {
   const el = $('legend-items');
   const counts = {};
-  state.houses.forEach((h) => { counts[h.type] = (counts[h.type] || 0) + 1; });
+  (state.houses.length ? state.houses : state.units).forEach((h) => { counts[h.type] = (counts[h.type] || 0) + 1; });
   el.innerHTML = Object.entries(TYPES).map(([k, ty]) => {
     const on = state.activeTypes.has(+k);
     return `<button class="chip ${on ? '' : 'off'}" data-type="${k}" title="${t('onlyType')}"><span class="dot" style="background:${ty.hex}"></span><span class="chip-label">${ty.label[state.lang]}</span><span class="chip-sub">${ty.beds}${state.lang === 'pt' ? 'q' : 'bd'} · ${ty.baths}${state.lang === 'pt' ? 'b' : 'ba'}${ty.units > 1 ? ' ×2' : ''}</span><span class="chip-count">${counts[k] || 0}</span></button>`;
@@ -1434,17 +1573,21 @@ function buildLegend() {
     b.onclick = (ev) => {
       const k = +b.dataset.type;
       if (ev.shiftKey || ev.altKey) { if (state.activeTypes.has(k) && state.activeTypes.size > 1) state.activeTypes.delete(k); else state.activeTypes.add(k); }
-      else if (state.activeTypes.size === 1 && state.activeTypes.has(k)) state.activeTypes = new Set([1, 2, 3, 4]);
+      else if (state.activeTypes.size === 1 && state.activeTypes.has(k)) state.activeTypes = allTypes();
       else state.activeTypes = new Set([k]);
       if (state.selected && !state.activeTypes.has(state.selected.type)) clearSelection();
       applyFilter(); buildLegend();
     };
   });
-  $('chip-all').onclick = () => { state.activeTypes = new Set([1, 2, 3, 4]); applyFilter(); buildLegend(); };
+  $('chip-all').onclick = () => { state.activeTypes = allTypes(); applyFilter(); buildLegend(); };
   // parcels / phases
   const perParcel = {};
-  state.houses.forEach((h) => { perParcel[h.parcel] = (perParcel[h.parcel] || 0) + 1; });
+  (state.houses.length ? state.houses : state.units).forEach((h) => { perParcel[h.parcel] = (perParcel[h.parcel] || 0) + 1; });
+  $('legend-parcels-title').textContent = t(state.isBuilding ? 'towers' : 'parcels');
+  const onePhase = state.isBuilding && Object.keys(perParcel).length <= 1;   // a single tower: nothing to filter
+  $('legend-parcels-title').hidden = onePhase;
   const pel = $('parcel-items');
+  pel.hidden = onePhase;
   pel.innerHTML = PARCELS.map((p) => `<button class="pchip ${state.activeParcels.has(p) ? '' : 'off'}${isLockedParcel(p) ? ' locked' : ''}" data-parcel="${p}" title="${isLockedParcel(p) ? t('lockedHint') : ''}">${p}<small>${perParcel[p] || 0}</small></button>`).join('');
   pel.querySelectorAll('.pchip').forEach((b) => {
     b.onclick = (ev) => {
@@ -1478,16 +1621,24 @@ function buildLegend() {
   tbl.hidden = !state.byPhase;
   tbl.innerHTML = state.byPhase ? `<div class="sbp-row head"><span>${t('parcel')}</span>${Object.values(STATUS).map((st) => `<span><span class="dot" style="background:${st.hex}"></span></span>`).join('')}</div>`
     + PARCELS.filter((k) => perPhase[k]).map((k) => `<div class="sbp-row ${state.activeParcels.has(k) ? '' : 'off'}"><span><b>${k}</b></span><span>${perPhase[k].available}</span><span>${perPhase[k].reserved}</span><span>${perPhase[k].sold}</span></div>`).join('') : '';
+  // vertical projects: floor chips (the floors above the chosen one are ghosted / hidden / lifted)
+  const fl = $('floor-items'), ft = $('legend-floors-title');
+  if (state.floors.length) {
+    ft.hidden = fl.hidden = false;
+    fl.innerHTML = `<button class="pchip ${state.floor == null ? '' : 'off'}" data-floor="all">${t('allFloors')}</button>` + state.floors.map((f) => `<button class="pchip ${state.floor === f.n ? '' : 'off'}" data-floor="${f.n}">${f.name || f.n}</button>`).join('');
+    fl.querySelectorAll('.pchip').forEach((b) => { b.onclick = () => { state.floor = b.dataset.floor === 'all' ? null : +b.dataset.floor; applyFloorReveal(); if (state.selected && !isVisibleHouse(state.selected)) clearSelection(); applyFilter(); buildLegend(); }; });
+  } else { ft.hidden = fl.hidden = true; }
 }
 function updateCounter() {
   const n = state.units.filter(isVisibleHouse).length;
   $('count-houses').textContent = fmt(n);
-  $('count-lots').textContent = fmt(state.lots.filter((l) => !l.park && l.area_m2 > 60).length);
+  $('count-lots').textContent = fmt(state.isBuilding ? state.floors.length : state.lots.filter((l) => !l.park && l.area_m2 > 60).length);
 }
 function applyI18n() {
   document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll('[data-i18n-ph]').forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
   document.querySelectorAll('[data-i18n-title]').forEach((el) => { el.title = t(el.dataset.i18nTitle); });
+  if (state.isBuilding) { $('count-houses-label').textContent = t('unitsWord'); $('count-lots-label').textContent = t('floors').toLowerCase(); }
   if ($('btn-lang')) $('btn-lang').textContent = state.lang === 'en' ? 'PT' : 'EN';
   $('btn-night').textContent = state.night ? t('day') : t('night');
   document.documentElement.lang = state.lang === 'pt' ? 'pt-BR' : 'en';
@@ -1505,10 +1656,10 @@ function renderPanel(h) {
   const prop = h.prop || {};
   const twin = h.house && h.house.units.length > 1 ? h.house.units.find((u) => u !== h) : null;
   renderGallery(h);
-  $('panel-title').textContent = `${t('lot')} ${h.code}${prop.planName ? ` · ${prop.planName}` : ''}`;
+  $('panel-title').textContent = h.kind === 'apartment' ? `${t('unitTitle')} ${h.code}${prop.planName ? ` · ${prop.planName}` : (ty.label ? ` · ${ty.label[state.lang]}` : '')}` : `${t('lot')} ${h.code}${prop.planName ? ` · ${prop.planName}` : ''}`;
   const badge = $('panel-status'); badge.className = `status-badge ${st}`; badge.textContent = STATUS[st].label[state.lang];
-  $('panel-sub').innerHTML = `${t('phase')} ${h.parcel}${prop.parcelInferred ? ` <span class="inferred-note">(${t('inferred')})</span>` : ''}${sinfo.updatedAt ? ` · ${t('lastUpdate')} ${new Date(sinfo.updatedAt).toLocaleDateString(state.lang === 'pt' ? 'pt-BR' : 'en-GB')}` : ''}`;
-  $('panel-body').innerHTML = `
+  $('panel-sub').innerHTML = `${h.kind === 'apartment' ? `${t('tower')} ${h.parcel} · ${t('floor')} ${h.floor}` : `${t('phase')} ${h.parcel}`}${prop.parcelInferred ? ` <span class="inferred-note">(${t('inferred')})</span>` : ''}${sinfo.updatedAt ? ` · ${t('lastUpdate')} ${new Date(sinfo.updatedAt).toLocaleDateString(state.lang === 'pt' ? 'pt-BR' : 'en-GB')}` : ''}`;
+  $('panel-body').innerHTML = h.kind === 'apartment' ? apartmentFacts(h, ty) : `
     <div class="facts">
       <div class="fact"><span class="k">${t('houseModel')}</span><span class="v">${prop.planName || '–'} <em>${state.lang === 'pt' ? 'Opção' : 'Option'} ${state.registry?.plans?.[h.type]?.option ?? '–'} · ${h.kind === 'duplex' ? 'Duplex' : (state.lang === 'pt' ? 'Casa isolada' : 'Single house')}</em></span></div>
       <div class="fact"><span class="k">${state.lang === 'pt' ? 'Programa' : 'Layout'}</span><span class="v">${ty.beds} ${t('beds')} · ${ty.baths} ${t('baths')}${ty.units > 1 ? ` <em>2 ${t('units')}</em>` : ''}</span></div>
@@ -1520,8 +1671,9 @@ function renderPanel(h) {
     </div>`;
   if (twin) $('panel-twin').onclick = (ev) => { ev.preventDefault(); select(twin, false); };
   $('panel-body').querySelectorAll('.swatch-btn').forEach((b) => { b.onclick = () => setHouseColour(h, b.dataset.color); });
-  const plan = prop.plan || state.registry?.plans?.[h.type]?.file;
+  const plan = prop.plan || state.registry?.plans?.[h.type]?.file || ty.plan;
   $('panel-plan').src = plan ? imageUrl(`assets/plans/${plan}`) : '';
+  document.querySelector('.plan-section').hidden = !plan;   // no floor plan for this type yet
   $('panel-plan-name').textContent = plan ? `${prop.planName || ''} · ${ty.beds} ${t('beds')} · ${ty.baths} ${t('baths')}${ty.units > 1 ? ` · ${t('perUnit')}` : ''}` : '';
   // sales actions: reserve only while available; "sold" for staff; nothing writes without a backend
   const canWrite = api.hasBackend();
@@ -1580,8 +1732,12 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', 
 const colourCss = (name) => { const c = state.data.colors[name] || [0.8, 0.8, 0.8]; return new THREE.Color().setRGB(c[0], c[1], c[2], THREE.LinearSRGBColorSpace).getStyle(); };
 const kindLabel = (kind) => (kind === 'duplex' ? t('duplexHouse') : t('singleHouse'));
 function galleryItems(h) {
+  const ty = TYPES[h.type] || {};
+  // a type with its own render list (apartments, or houses without facade colours): assets/img/<file>
+  if (Array.isArray(ty.images) && ty.images.length) return ty.images.map((f, i) => ({ index: i + 1, src: `assets/img/${f}`, label: ty.label ? ty.label[state.lang] : '', kind: h.kind }));
+  if (!state.data.colors || !Object.keys(state.data.colors).length) return [];
   // only the renders of this body kind (single house or duplex), this house's colour first
-  const items = Object.entries(IMAGE_COLOR).map(([i, color]) => ({ index: +i, color, label: COLOR_LABEL[color] || color, kind: IMAGE_KIND[+i] })).filter((it) => it.kind === h.kind);
+  const items = Object.entries(IMAGE_COLOR).map(([i, color]) => ({ index: +i, src: `assets/img/house_${i}.jpg`, color, label: COLOR_LABEL[color] || color, kind: IMAGE_KIND[+i] })).filter((it) => it.kind === h.kind);
   return items.sort((a, b) => (b.color === h.color) - (a.color === h.color) || a.index - b.index);
 }
 function renderGallery(h) {
@@ -1589,8 +1745,9 @@ function renderGallery(h) {
   showGalleryItem();
 }
 function showGalleryItem() {
-  const { items, index, h } = state.gallery; const it = items[index]; if (!it) return;
-  $('panel-img').src = imageUrl(`assets/img/house_${it.index}.jpg`);
+  const { items, index, h } = state.gallery; const it = items[index];
+  const fig = $('panel-figure'); if (!it) { fig.hidden = true; return; } fig.hidden = false;
+  $('panel-img').src = imageUrl(it.src);
   $('panel-img').alt = `${it.label} · ${kindLabel(it.kind)}`;
   $('panel-imgnote').textContent = it.kind === h.kind ? `${it.label} · ${kindLabel(it.kind)}` : `${it.label} · ${t('similarHouse')} (${kindLabel(it.kind).toLowerCase()})`;
   $('gal-dots').innerHTML = items.map((x, i) => `<span class="${i === index ? 'on' : ''}"></span>`).join('');
@@ -1753,7 +1910,7 @@ function closeRegionMap() {
 }
 function handleHash() {
   const p = location.hash.match(/p-([0-9a-f]{8,}(?:-[12])?)/i);
-  if (p) { const h = state.unitByPid.get(`LH_${p[1]}`); if (h) { if (isLockedParcel(h.parcel)) openUnlock(h.parcel, h); else select(h, true); return; } }
+  if (p) { const h = state.unitByPid.get(`${PID_PREFIX}${p[1]}`); if (h) { if (isLockedParcel(h.parcel)) openUnlock(h.parcel, h); else select(h, true); return; } }
   const m = location.hash.match(/casa-(\d+)/);
   if (!m) return;
   const h = state.byId.get(`Casa ${m[1].padStart(3, '0')}`);
@@ -1771,6 +1928,7 @@ function animate(now) {
   const dt = lastFrame ? (now - lastFrame) / 1000 : 0.016;
   lastFrame = now;
   updateFlight(now);
+  animateFloors();
   if (cars) cars.update(dt);
   if (planes) planes.update(dt, now);
   if (night) night.update(now);
@@ -1794,7 +1952,7 @@ window.addEventListener('resize', () => {
   if (pois) pois.resize();
 });
 
-window.__app = { setLod: (d) => { LOD_DIST = d; rebuildInstances(true); return LOD_DIST; }, get lodDist() { return LOD_DIST; }, models, scene, camera, renderer, controls, state, unitAt, unitOfHouseAt, houseGroups, proxies, modelInfo, select, flyTo, setOverview, SUN_DIR, MATS, setNight, setTime: (tt) => night && night.setTime(tt), openRegionMap, get night() { return night; }, get cars() { return cars; }, get regionMap() { return regionMap; }, get pois() { return pois; }, get planes() { return planes; }, get csm() { return csm; }, get composer() { return composer; }, get gtao() { return gtao; } };
+window.__app = { BUILDING, applyFloorReveal: () => applyFloorReveal(), setLod: (d) => { LOD_DIST = d; rebuildInstances(true); return LOD_DIST; }, get lodDist() { return LOD_DIST; }, models, scene, camera, renderer, controls, state, unitAt, unitOfHouseAt, houseGroups, proxies, modelInfo, select, flyTo, setOverview, SUN_DIR, MATS, setNight, setTime: (tt) => night && night.setTime(tt), openRegionMap, get night() { return night; }, get cars() { return cars; }, get regionMap() { return regionMap; }, get pois() { return pois; }, get planes() { return planes; }, get csm() { return csm; }, get composer() { return composer; }, get gtao() { return gtao; } };
 
 init().catch((err) => {
   console.error(err);

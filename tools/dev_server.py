@@ -11,7 +11,7 @@ Then open http://localhost:5173/?backend=http://localhost:5173/api to point the 
 import functools, http.server, json, os, re, sys, threading, time
 from urllib.parse import urlparse, parse_qs
 
-PID_RE = re.compile(r'^LH_[0-9a-f]{32}(-[12])?$')   # -1 / -2 = the two sides of a semi-detached house
+PID_RE = re.compile(r'^[A-Z]{2,4}_[0-9a-f]{32}(-[12])?$')   # <project prefix>_<uuid hex>; -1 / -2 = the two sides of a semi-detached house
 STATUSES = ('available', 'reserved', 'sold')
 RESERVE_PW = os.environ.get('LH_RESERVE_PASSWORD', 'reserve123')
 ADMIN_PW = os.environ.get('LH_ADMIN_PASSWORD') or RESERVE_PW   # one password for everything unless an admin one is set

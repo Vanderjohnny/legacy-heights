@@ -112,6 +112,7 @@ export function createNight(ctx) {
   // ------------------------------------------------------------------------------------------------------------
   const CITY = { near: { n: 384, count: 1400, size: 6 }, mid: { n: 384, count: 2600, size: 8 }, far: { n: 448, count: 3200, size: 16 }, vast: { n: 448, count: 2600, size: 40 } };
   function buildCityLights() {
+    if (!satMeshes.length) return;
     if (S.city || (S.cityTries || 0) > 40) return;
     const byLevel = {};
     for (const sm of satMeshes) byLevel[sm.userData.level] = sm;

@@ -1,6 +1,6 @@
 // Sales backend client. The authoritative state lives in the Google Apps Script web app (tools/backend/Code.gs).
 // Without a backend URL the page runs read-only: statuses come from data/status.json and leads fall back to e-mail.
-import { BACKEND } from './config.js?v=26';
+import { BACKEND, PID_PREFIX } from './config.js?v=27';
 
 // local testing only: http://localhost:5173/?backend=http://localhost:5173/api points the page at the mock backend of tools/dev_server.py
 const LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
@@ -48,7 +48,7 @@ export const api = {
     try { return await call('unlock', { password }); }
     catch (e) {
       if (e.message !== 'unknown-action') throw e;
-      try { await call('release', { pid: 'LH_' + '0'.repeat(32), code: '-', password, by: 'unlock' }); }
+      try { await call('release', { pid: PID_PREFIX + '0'.repeat(32), code: '-', password, by: 'unlock' }); }
       catch (e2) { if (e2.message === 'not-available') return { ok: true }; throw e2; }
       return { ok: true };
     }

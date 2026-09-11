@@ -7,6 +7,13 @@ export const SQFT_PER_M2 = 10.7639;
 // null = every phase open (no password gate)
 export const OPEN_PARCELS = ['A'];
 
+// stable id prefix of the units (unit_id = PREFIX + 32 hex); the backend accepts 2-4 capital letters + underscore
+export const PID_PREFIX = 'LH_';
+// project typology: lots | houses | building | house (references/03 of the skill); building = floors + apartments read from data/site.json
+export const TYPOLOGY = 'houses';
+// vertical projects: how the floors above the selected one are shown: 'ghost' (transparent), 'hide' or 'explode' (lifted by explodeGap m each)
+export const BUILDING = { reveal: 'ghost', explodeGap: 2.5 };
+
 export const TYPES = {
   1: { key: 'type1', beds: 2, baths: 2, gfaSqft: 725, roofSqft: 853, units: 1, hex: '#7bd944', label: { en: 'House Altura', pt: 'Casa Altura' } },
   2: { key: 'type2', beds: 3, baths: 1, gfaSqft: 839, roofSqft: 970, units: 1, hex: '#d58cff', label: { en: 'House Horizon', pt: 'Casa Horizon' } },
@@ -117,6 +124,7 @@ export const I18N = {
     parcels: 'Phases',
     parcelsHint: 'Show or hide the houses of each phase',
     leisure: 'Leisure', leisureTitle: 'Leisure areas', chooseColour: 'choose the facade colour · the 3D house updates', similarHouse: 'similar house', singleHouse: 'Single house', duplexHouse: 'Duplex', galleryHint: 'Click to enlarge · arrows for the other colours', colourWord: 'Facade colour',
+    floors: 'Floors', floor: 'Floor', allFloors: 'All floors', towers: 'Towers', tower: 'Tower', privateArea: 'Private area', totalArea: 'Total area', unitsWord: 'units', apartmentType: 'Apartment type',
     phase: 'Phase', underConstruction: 'under construction', unlockIntro: 'This phase is not released yet. Enter the access password to preview it.', unlock: 'Unlock', checking: 'Checking…', unlocked: 'Phase {p} unlocked.', legendMenu: 'Legend', lockedHint: 'Under construction · click to enter the password',
     propertyId: 'Property ID',
     status: 'Status',
@@ -169,7 +177,7 @@ export const I18N = {
     loadingMap: 'Loading the map…',
     byPhase: 'By phase',
     twin: 'Semi-detached with',
-    unit: 'unit',
+    unit: 'unit', unitTitle: 'Unit',
     statusHint: 'Show or hide the houses with this status (shift-click: only this one)',
     lighting: 'Lighting',
     dusk: 'Dusk',
@@ -221,6 +229,7 @@ export const I18N = {
     parcels: 'Fases',
     parcelsHint: 'Mostre ou oculte as casas de cada fase',
     leisure: 'Lazer', leisureTitle: 'Áreas de lazer', chooseColour: 'escolha a cor da fachada · a casa 3D atualiza', similarHouse: 'casa semelhante', singleHouse: 'Casa isolada', duplexHouse: 'Geminada', galleryHint: 'Clique para ampliar · setas para as outras cores', colourWord: 'Cor da fachada',
+    floors: 'Pavimentos', floor: 'Pavimento', allFloors: 'Todos', towers: 'Torres', tower: 'Torre', privateArea: 'Área privativa', totalArea: 'Área total', unitsWord: 'unidades', apartmentType: 'Tipo de apartamento',
     phase: 'Fase', underConstruction: 'em construção', unlockIntro: 'Esta fase ainda não foi liberada. Digite a senha de acesso para vê-la.', unlock: 'Liberar', checking: 'Verificando…', unlocked: 'Fase {p} liberada.', legendMenu: 'Legenda', lockedHint: 'Em construção · clique para digitar a senha',
     propertyId: 'ID do imóvel',
     status: 'Situação',
@@ -273,7 +282,7 @@ export const I18N = {
     loadingMap: 'Carregando o mapa…',
     byPhase: 'Por fase',
     twin: 'Geminada com',
-    unit: 'unidade',
+    unit: 'unidade', unitTitle: 'Unidade',
     statusHint: 'Mostre ou oculte as casas com esta situação (shift+clique: somente esta)',
     lighting: 'Iluminação',
     dusk: 'Entardecer',

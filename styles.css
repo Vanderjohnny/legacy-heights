@@ -174,3 +174,7 @@ h1, h2, h3, p { margin: 0; }
   .panel-actions { padding: 8px 12px calc(10px + env(safe-area-inset-bottom)); gap: 6px; }
   .panel-actions .btn { height: 36px; font-size: 13px; }
 }
+/* text fallback when the project has no logotype yet */
+.brand-text { font-family: var(--serif); font-weight: 500; font-size: 22px; line-height: 1.1; margin: 0; }
+.brand-text.large { color: #fff; font-size: 44px; text-shadow: 0 4px 24px rgba(0,0,0,0.5); margin: 0 0 20px; }
+.plan-section[hidden] { display: none; }

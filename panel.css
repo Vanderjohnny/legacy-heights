@@ -200,3 +200,7 @@ body.night .swatch-btn.on { border-color: #fff; }
 .lb-nav:hover { background: rgba(255,255,255,0.32); }
 .lb-prev { left: 18px; } .lb-next { right: 18px; }
 .lb-nav[hidden] { display: none; }
+/* vertical projects: floor chips; panel figure hidden when a type has no renders */
+#floor-items { display: flex; flex-wrap: wrap; gap: 4px; }
+#floor-items[hidden], #legend-floors-title[hidden], #legend-parcels-title[hidden], #parcel-items[hidden] { display: none; }
+#panel-figure[hidden] { display: none; }
