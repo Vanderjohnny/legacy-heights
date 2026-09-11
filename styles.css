@@ -31,7 +31,7 @@ h1, h2, h3, p { margin: 0; }
 .loading-card p { color: rgba(255,255,255,0.88); margin-top: 14px; font-size: 13px; text-shadow: 0 1px 6px rgba(0,0,0,0.6); }
 /* text loader under the logotype (cssloaders.github.io, 'text'): one word every 1.2 s, five equal steps so
    the last word is shown as long as the others; the site font instead of Arial */
-.loader { display: inline-block; font-family: var(--font); font-weight: 700; font-size: clamp(24px, 5vw, 44px); letter-spacing: 2px; line-height: 1.2; color: #fff; text-shadow: 0 2px 16px rgba(0,0,0,0.6); box-sizing: border-box; min-height: 1.2em; }
+.loader { display: inline-block; font-family: 'Montserrat', var(--font); font-weight: 500; font-size: clamp(24px, 5vw, 44px); letter-spacing: 2px; line-height: 1.2; color: #fff; text-shadow: 0 2px 16px rgba(0,0,0,0.6); box-sizing: border-box; min-height: 1.2em; }
 .loader::before { content: 'Loading...'; animation: animloader 6s steps(1) infinite; }
 @keyframes animloader {
   0% { content: 'Loading...'; }
